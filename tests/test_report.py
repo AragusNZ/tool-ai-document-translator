@@ -62,6 +62,20 @@ def test_generate_results_markdown_skipped_translation_uses_target_lang() -> Non
     assert "already in Spanish" in md
 
 
+def test_generate_results_markdown_no_translate() -> None:
+    metadata = JobMetadata(
+        job_id="no-translate-job",
+        source_file="doc.txt",
+        no_translate=True,
+        skipped_translation=True,
+        source_lang="es",
+        target_lang="en",
+    )
+    md = generate_results_markdown(metadata, [])
+    assert "--no-translate" in md
+    assert "original text was exported" in md
+
+
 def test_generate_results_markdown_with_issues_and_availability() -> None:
     from document_translator.errors import PipelineIssue
     from document_translator.types import PipelineStage

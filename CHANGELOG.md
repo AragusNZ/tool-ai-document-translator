@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Subprocess timeouts (`subprocess_timeout_seconds`) for pandoc, LibreOffice, and PDF export
 - Per-LLM request timeout (`llm_request_timeout_seconds`) for OpenAI, Anthropic, and Google clients
 - Webhook delivery retries with exponential backoff (`webhook_max_retries`, `webhook_retry_base_delay`)
-- Security regression tests, contract shape tests, and subprocess translate E2E test
+- `--no-translate` flag to skip translation and export extracted text (extraction and detection still run)
 - CI: Python 3.11/3.12 matrix, ruff lint, pip-audit, Trivy image scan on release, workflow deduplication
 - `requirements-lock.txt` for pinned dependency installs; Docker base image digest pin
 - Pre-commit hooks (ruff + fast pytest) and Dependabot config

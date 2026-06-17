@@ -29,6 +29,7 @@ $process = new Process([
     '--export-format', $this->exportFormat,  // e.g. pdf, docx; omit to match input extension
     '--llm', $this->llm,  // e.g. cursor:composer-2.5 (default), openai:gpt-4o
     '--mode', $this->translationMode,  // quick (default) or thorough (dual-pass verification)
+    '--no-translate',  // optional: skip translation and export extracted text
     '--timeout', (string) config('document-translator.job_timeout', 3600),
     '--webhook-url', config('document-translator.webhook_url'),
     '--webhook-secret', config('document-translator.webhook_secret'),

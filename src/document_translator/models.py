@@ -71,6 +71,7 @@ class JobMetadata(BaseModel):
     translation_context: str | None = None
     is_legal_document: bool = False
     skipped_translation: bool = False
+    no_translate: bool = False
     model: str = DEFAULT_LLM_SELECTOR
     page_count: int | None = None
     chunk_count: int = 0
@@ -161,6 +162,7 @@ class TranslationOptions(BaseModel):
     export_format: ExportFormat | None = None
     translation_mode: TranslationMode = TranslationMode.QUICK
     translation_context: str | None = None
+    no_translate: bool = False
 
     @field_validator("translation_context", mode="before")
     @classmethod

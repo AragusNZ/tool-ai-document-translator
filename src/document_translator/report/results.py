@@ -35,7 +35,11 @@ def generate_results_markdown(
 
     lines.extend(["", "## Summary", ""])
 
-    if metadata.skipped_translation:
+    if metadata.no_translate:
+        lines.append(
+            "Translation was skipped per --no-translate; original text was exported without translation."
+        )
+    elif metadata.skipped_translation:
         target = lang_display_name(metadata.target_lang)
         lines.append(
             f"Source document was already in {target}. Translation was skipped; text was copied through."

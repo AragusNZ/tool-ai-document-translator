@@ -107,6 +107,33 @@ def test_cover_omits_quick_mode_note_when_skipped() -> None:
     assert "Quick (single-pass" not in md
 
 
+def test_cover_no_translate_headline_and_footer() -> None:
+    metadata = JobMetadata(
+        job_id="job-no-translate",
+        source_file="doc.txt",
+        no_translate=True,
+        skipped_translation=True,
+        source_lang="es",
+        target_lang="en",
+    )
+    md = generate_cover_markdown(metadata, [], has_warnings=False)
+    assert "original text was exported without translation" in md
+    assert "detected; not translated" in md
+    assert "original document begins on the next page" in md
+    assert "Quick (single-pass" not in md
+
+
+def test_summary_no_translate_headline() -> None:
+    metadata = JobMetadata(
+        job_id="job-no-translate",
+        source_file="doc.txt",
+        no_translate=True,
+        skipped_translation=True,
+    )
+    summary = build_job_summary(metadata, [], has_warnings=False)
+    assert "original text was exported without translation" in summary.headline
+
+
 def test_cover_includes_warnings() -> None:
     metadata = JobMetadata(
         job_id="job-3",

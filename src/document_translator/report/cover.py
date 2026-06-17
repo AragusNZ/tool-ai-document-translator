@@ -38,6 +38,8 @@ def translate_cover_markdown(
 def _outcome_headline(metadata: JobMetadata, *, has_warnings: bool) -> str:
     if metadata.job_status == JobStatus.FAILED:
         return "Translation did not complete successfully."
+    if metadata.no_translate:
+        return "Translation was skipped; original text was exported without translation."
     if metadata.skipped_translation:
         target = lang_display_name(metadata.target_lang)
         return f"Document was already in {target}; text was passed through without translation."
@@ -108,7 +110,12 @@ def generate_cover_markdown(
         f"**Outcome:** {summary.headline}",
     ]
 
-    if metadata.skipped_translation:
+    if metadata.no_translate:
+        if metadata.source_lang:
+            lines.append(
+                f"**Language:** {metadata.source_lang} (detected; not translated)"
+            )
+    elif metadata.skipped_translation:
         pass
     elif metadata.source_lang:
         lines.append(
@@ -123,6 +130,7 @@ def generate_cover_markdown(
 
     if (
         not metadata.skipped_translation
+        and not metadata.no_translate
         and metadata.translation_mode == TranslationMode.QUICK.value
     ):
         lines.append("**Mode:** Quick (single-pass; no dual-pass verification)")
@@ -137,5 +145,10 @@ def generate_cover_markdown(
         for item in summary.review_items:
             lines.append(f"- {item}")
 
-    lines.extend(["", "*The translated document begins on the next page.*", ""])
+    footer = (
+        "*The original document begins on the next page.*"
+        if metadata.no_translate
+        else "*The translated document begins on the next page.*"
+    )
+    lines.extend(["", footer, ""])
     return "\n".join(lines)

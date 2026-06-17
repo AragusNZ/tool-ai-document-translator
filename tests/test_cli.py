@@ -487,6 +487,81 @@ def test_cli_mode_flag(tmp_path: Path) -> None:
     assert captured["options"].translation_mode == TranslationMode.THOROUGH
 
 
+def test_cli_no_translate_flag(tmp_path: Path) -> None:
+    doc = tmp_path / "doc.txt"
+    doc.write_text("hello", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    class FakeService:
+        def __init__(self, config: PipelineConfig) -> None:
+            pass
+
+        def translate(self, input_path: Path, options):  # noqa: ANN001
+            captured["options"] = options
+            metadata = JobMetadata(job_id="no-translate-flag", source_file="doc.txt")
+            return JobResult(
+                job_id="no-translate-flag",
+                status=JobStatus.COMPLETED,
+                artifacts=ArtifactPaths(),
+                metadata=metadata,
+            )
+
+    with patch("document_translator.cli.DocumentTranslationService", FakeService):
+        code = main(
+            [
+                "translate",
+                str(doc),
+                "--job-id",
+                "no-translate-flag",
+                "--output-dir",
+                str(tmp_path / "runs"),
+                "--no-translate",
+            ]
+        )
+
+    assert code == 0
+    assert captured["options"].no_translate is True
+
+
+def test_cli_no_translate_from_config(tmp_path: Path) -> None:
+    doc = tmp_path / "doc.txt"
+    doc.write_text("hello", encoding="utf-8")
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps({"no_translate": True}), encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    class FakeService:
+        def __init__(self, config: PipelineConfig) -> None:
+            pass
+
+        def translate(self, input_path: Path, options):  # noqa: ANN001
+            captured["options"] = options
+            metadata = JobMetadata(job_id="no-translate-cfg", source_file="doc.txt")
+            return JobResult(
+                job_id="no-translate-cfg",
+                status=JobStatus.COMPLETED,
+                artifacts=ArtifactPaths(),
+                metadata=metadata,
+            )
+
+    with patch("document_translator.cli.DocumentTranslationService", FakeService):
+        code = main(
+            [
+                "translate",
+                str(doc),
+                "--job-id",
+                "no-translate-cfg",
+                "--output-dir",
+                str(tmp_path / "runs"),
+                "--config",
+                str(config_file),
+            ]
+        )
+
+    assert code == 0
+    assert captured["options"].no_translate is True
+
+
 def test_cli_mode_from_config(tmp_path: Path) -> None:
     doc = tmp_path / "doc.txt"
     doc.write_text("hello", encoding="utf-8")

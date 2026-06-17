@@ -285,6 +285,42 @@ def test_cover_translation_failure_falls_back_to_english(english_doc: Path, tmp_
 
 
 @pytest.mark.integration
+def test_no_translate_skips_translation_and_exports(spanish_contract: Path, tmp_path: Path) -> None:
+    mock = MockLLMClient(prefix="[EN] ")
+    config = PipelineConfig(runs_dir=tmp_path / "runs", root=tmp_path, keep_work_files=True)
+    service = DocumentTranslationService(config=config, llm=mock)
+
+    def _touch_export(source: Path, target: Path, fmt: ExportFormat, **kwargs: object) -> None:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("exported", encoding="utf-8")
+
+    def _translation_calls() -> int:
+        return sum(
+            1
+            for system, _ in mock.calls
+            if "professional document translator" in system.lower()
+        )
+
+    with patch("document_translator.pipeline.export_markdown", side_effect=_touch_export):
+        result = service.translate(
+            spanish_contract,
+            TranslationOptions(job_id="no-translate-job", no_translate=True, target_lang="en"),
+        )
+
+    assert result.status == JobStatus.COMPLETED
+    assert result.metadata.skipped_translation is True
+    assert result.metadata.no_translate is True
+    assert result.metadata.source_lang == "es"
+    assert result.discrepancies == []
+    assert result.artifacts.final_output is not None
+    assert _translation_calls() == 0
+
+    job_root = tmp_path / "runs" / "no-translate-job"
+    resolved = (job_root / "artifacts" / "04-resolved.md").read_text(encoding="utf-8")
+    assert "CONTRATO" in resolved or "contrato" in resolved.lower()
+
+
+@pytest.mark.integration
 def test_spanish_source_skips_when_target_matches(spanish_contract: Path, tmp_path: Path) -> None:
     mock = MockLLMClient(prefix="[ES] ")
     config = PipelineConfig(runs_dir=tmp_path / "runs", root=tmp_path)
@@ -302,6 +338,7 @@ def test_spanish_source_skips_when_target_matches(spanish_contract: Path, tmp_pa
 
     assert result.status == JobStatus.COMPLETED
     assert result.metadata.skipped_translation is True
+    assert result.metadata.no_translate is False
     assert result.metadata.source_lang == "es"
     assert result.metadata.target_lang == "es"
     assert result.discrepancies == []

@@ -553,11 +553,12 @@ class DocumentTranslationService:
                 stage=PipelineStage.DETECTING_LANGUAGE,
             )
 
-        skip_translation = source_lang == opts.target_lang
+        skip_translation = opts.no_translate or source_lang == opts.target_lang
         thorough = opts.translation_mode == TranslationMode.THOROUGH
 
         if skip_translation:
             metadata.skipped_translation = True
+            metadata.no_translate = opts.no_translate
             job_paths.translation_1_md.write_text(body_text, encoding="utf-8")
             if thorough:
                 job_paths.translation_2_md.write_text(body_text, encoding="utf-8")
@@ -700,7 +701,7 @@ class DocumentTranslationService:
                 discrepancies,
                 has_warnings=collector.has_warnings(),
             )
-            if opts.target_lang != "en":
+            if opts.target_lang != "en" and not opts.no_translate:
                 try:
                     deadline.check(current_stage)
                     cover_md = translate_cover_markdown(

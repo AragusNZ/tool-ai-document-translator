@@ -87,6 +87,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Disable OCR fallback for scanned/image-only PDFs (PyMuPDF text extraction only)",
     )
     translate.add_argument(
+        "--no-translate",
+        action="store_true",
+        help="Skip translation; export extracted text without translating",
+    )
+    translate.add_argument(
         "--timeout",
         type=float,
         default=None,
@@ -103,7 +108,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional HMAC secret for X-Document-Translator-Signature (DOCUMENT_TRANSLATOR_WEBHOOK_SECRET)",
     )
-    translate.add_argument("--config", type=Path, default=None, help="Optional JSON config (PipelineConfig + export_format + target_lang + source_lang + translation_context + translation_mode + pdf_ocr + job_timeout_seconds + webhook_url + webhook_secret)")
+    translate.add_argument("--config", type=Path, default=None, help="Optional JSON config (PipelineConfig + export_format + target_lang + source_lang + translation_context + translation_mode + no_translate + pdf_ocr + job_timeout_seconds + webhook_url + webhook_secret)")
 
     check = sub.add_parser("check", help="Verify system dependencies and configuration")
     check.add_argument("--format", choices=["text", "json"], default="text", help="Output format")
@@ -351,6 +356,10 @@ def _build_translation_options(
             print(str(exc), file=sys.stderr)
             return None
 
+    no_translate = args.no_translate
+    if "no_translate" in config_overrides:
+        no_translate = bool(config_overrides["no_translate"])
+
     return TranslationOptions(
         job_id=job_id,
         force_overwrite=args.force_overwrite,
@@ -359,6 +368,7 @@ def _build_translation_options(
         target_lang=target_lang,
         translation_mode=translation_mode,
         translation_context=translation_context,
+        no_translate=no_translate,
     )
 
 
