@@ -74,8 +74,11 @@ def test_artifact_availability_terminal_keys(tmp_path: Path) -> None:
         terminal_status=JobStatus.COMPLETED,
     )
     availability = paths.artifact_availability()
-    assert set(availability.keys()) == {"final_output", "metadata_json", "status_json"}
-    assert all(availability.values())
+    assert set(availability.keys()) == {"final_output", "resolved_md", "metadata_json", "status_json"}
+    assert availability["final_output"] is True
+    assert availability["resolved_md"] is False
+    assert availability["metadata_json"] is True
+    assert availability["status_json"] is True
 
 
 def test_cleanup_removes_legacy_artifact_paths(tmp_path: Path) -> None:
@@ -86,6 +89,27 @@ def test_cleanup_removes_legacy_artifact_paths(tmp_path: Path) -> None:
     paths.cleanup_working_files()
     assert not paths.results_md.exists()
     assert not paths.discrepancies_json.exists()
+
+
+def test_cleanup_preserves_resolved_when_keep_resolved(tmp_path: Path) -> None:
+    paths = JobPaths(tmp_path / "runs", "job-resolved", export_format=ExportFormat.PDF)
+    paths.ensure_dirs()
+    paths.extracted_md.write_text("x", encoding="utf-8")
+    paths.resolved_md.write_text("resolved body", encoding="utf-8")
+    paths.final_output.write_text("final", encoding="utf-8")
+    paths.cleanup_working_files(keep_resolved=True)
+    assert not paths.extracted_md.exists()
+    assert paths.resolved_md.exists()
+    assert paths.resolved_md.read_text(encoding="utf-8") == "resolved body"
+    assert paths.final_output.exists()
+
+
+def test_to_artifact_paths_includes_resolved_md(tmp_path: Path) -> None:
+    paths = JobPaths(tmp_path / "runs", "job-resolved-art", export_format=ExportFormat.PDF)
+    paths.ensure_dirs()
+    paths.resolved_md.write_text("resolved", encoding="utf-8")
+    artifacts = paths.to_artifact_paths()
+    assert artifacts.resolved_md == paths.resolved_md
 
 
 def test_write_status_terminal(tmp_path: Path) -> None:

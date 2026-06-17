@@ -30,6 +30,8 @@ $process = new Process([
     '--llm', $this->llm,  // e.g. cursor:composer-2.5 (default), openai:gpt-4o
     '--mode', $this->translationMode,  // quick (default) or thorough (dual-pass verification)
     '--no-translate',  // optional: skip translation and export extracted text
+    '--save-resolved',  // optional: keep artifacts/04-resolved.md as terminal output
+    '--no-cover-page',  // optional: export without cover page
     '--timeout', (string) config('document-translator.job_timeout', 3600),
     '--webhook-url', config('document-translator.webhook_url'),
     '--webhook-secret', config('document-translator.webhook_secret'),
@@ -41,6 +43,7 @@ $exitCode = $process->run();
 
 $output = json_decode($process->getOutput(), true);
 // Exit 0 = completed, 3 = completed_with_warnings (check artifact_availability.final_output)
+// When --save-resolved is used, also check artifact_availability.resolved_md and artifacts.resolved_md
 // Terminal API payload: metadata.json (includes summary, discrepancies, issues)
 // User download: artifacts/05-final.{ext}
 if ($exitCode === 2) {

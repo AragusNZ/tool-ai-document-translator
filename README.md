@@ -70,6 +70,8 @@ Each job writes artifacts under a stable `runs/{job_id}/` layout so external orc
 - **Language detection** — `langdetect` with configurable confidence threshold; Cursor SDK fallback when confidence is low
 - **Legal document awareness** — Keyword heuristics plus optional AI confirmation; translation prompts preserve obligations, defined terms, dates, and amounts
 - **Extract-only mode** — `--no-translate` skips LLM translation and exports the extracted document body (extraction, detection, and export still run)
+- **Resolved markdown export** — `--save-resolved` keeps `04-resolved.md` and returns its path in CLI/JSON output
+- **Coverless export** — `--no-cover-page` exports the translated body without the summary cover page
 - **Dual-pass translation** (`--mode thorough`) — Two full independent passes reduce single-run hallucination risk
 - **Programmatic + AI reconciliation** (`--mode thorough`) — RapidFuzz sentence comparison, protected-token checks, semantic equivalence review, and third-pass adjudication
 - **Multi-provider LLM** — `provider:model` selector (`--llm`, `list-llms`); Cursor (default), OpenAI, Anthropic, Google Gemini; optional install extras or use the published Docker image (all providers pre-installed)
@@ -242,7 +244,7 @@ Settings are loaded from environment variables and optional JSON overrides. `Pip
 
 ### JSON config file
 
-Pass `--config path/to/config.json` to override `PipelineConfig` fields. Paths `runs_dir` and `root` are resolved as `Path` objects. The same file may include `export_format` (applied to `TranslationOptions` when `--export-format` is not set on the command line), `target_lang` (applied when `--target-lang` is not set), `source_lang` (applied when `--source-lang` is not set), `translation_context` (applied when `--translation-context` is not set), `translation_mode` (applied when `--mode` is not set), `no_translate` (applied when `--no-translate` is not set), and `pdf_ocr` (applied when `--no-pdf-ocr` is not set).
+Pass `--config path/to/config.json` to override `PipelineConfig` fields. Paths `runs_dir` and `root` are resolved as `Path` objects. The same file may include `export_format` (applied to `TranslationOptions` when `--export-format` is not set on the command line), `target_lang` (applied when `--target-lang` is not set), `source_lang` (applied when `--source-lang` is not set), `translation_context` (applied when `--translation-context` is not set), `translation_mode` (applied when `--mode` is not set), `no_translate` (applied when `--no-translate` is not set), `save_resolved` (applied when `--save-resolved` is not set), `no_cover_page` (applied when `--no-cover-page` is not set), and `pdf_ocr` (applied when `--no-pdf-ocr` is not set).
 
 ```json
 {
@@ -293,13 +295,15 @@ document-translator translate <input> [<input> ...] [options]
 | `--translation-context TEXT` | Per-job context (e.g. contract parties) included in every translation chunk prompt |
 | `--mode {quick,thorough}` | Translation mode: `quick` (single pass, default) or `thorough` (dual-pass verification) |
 | `--no-translate` | Skip translation; export extracted text without translating (extraction and detection still run) |
+| `--save-resolved` | Keep resolved markdown (`04-resolved.md`) after job completes; path returned in CLI/JSON output |
+| `--no-cover-page` | Export final document without the cover page |
 | `--no-pdf-ocr` | Disable OCR fallback for scanned/image-only PDFs (PyMuPDF text extraction only) |
 | `--timeout SECONDS` | Maximum job duration; fails with `JOB_TIMEOUT` when exceeded (also `DOCUMENT_TRANSLATOR_JOB_TIMEOUT`) |
 | `--webhook-url URL` | POST terminal job payload to URL after job artifacts are written (`DOCUMENT_TRANSLATOR_WEBHOOK_URL`; `http://` or `https://`) |
 | `--webhook-secret SECRET` | Optional HMAC secret for `X-Document-Translator-Signature` (`DOCUMENT_TRANSLATOR_WEBHOOK_SECRET`) |
 | `--llm SELECTOR` | LLM as `provider:model` (e.g. `cursor:composer-2.5`, `openai:gpt-4o`) |
 | `--force-overwrite` | Overwrite an existing `runs/{job_id}/` directory |
-| `--config PATH` | JSON file with `PipelineConfig` overrides and optional `export_format` / `target_lang` / `source_lang` / `translation_context` / `translation_mode` / `no_translate` / `pdf_ocr` / `job_timeout_seconds` / `webhook_url` / `webhook_secret` |
+| `--config PATH` | JSON file with `PipelineConfig` overrides and optional `export_format` / `target_lang` / `source_lang` / `translation_context` / `translation_mode` / `no_translate` / `save_resolved` / `no_cover_page` / `pdf_ocr` / `job_timeout_seconds` / `webhook_url` / `webhook_secret` |
 
 ### List LLMs
 

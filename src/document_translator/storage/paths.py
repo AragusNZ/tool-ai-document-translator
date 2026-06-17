@@ -59,6 +59,7 @@ class JobPaths:
     def to_artifact_paths(self) -> ArtifactPaths:
         return ArtifactPaths(
             final_output=self.final_output if self.final_output.exists() else None,
+            resolved_md=self.resolved_md if self.resolved_md.exists() else None,
             metadata_json=self.metadata_json,
             status_json=self.status_json,
         )
@@ -66,6 +67,7 @@ class JobPaths:
     def artifact_availability(self) -> dict[str, bool]:
         return {
             "final_output": self.final_output.exists(),
+            "resolved_md": self.resolved_md.exists(),
             "metadata_json": self.metadata_json.exists(),
             "status_json": self.status_json.exists(),
         }
@@ -81,7 +83,7 @@ class JobPaths:
             self.discrepancies_json,
         ]
 
-    def cleanup_working_files(self, *, keep_work_files: bool = False) -> None:
+    def cleanup_working_files(self, *, keep_work_files: bool = False, keep_resolved: bool = False) -> None:
         if keep_work_files:
             return
 
@@ -90,6 +92,8 @@ class JobPaths:
                 path.unlink()
 
         for path in self.working_file_paths():
+            if keep_resolved and path == self.resolved_md:
+                continue
             _safe_unlink(path)
 
         if self.input_dir.exists() and self.root in self.input_dir.parents:

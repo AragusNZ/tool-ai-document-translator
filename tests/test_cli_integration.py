@@ -41,6 +41,10 @@ def _assert_job_result_api(payload: dict[str, object]) -> None:
     assert isinstance(availability, dict)
     assert availability.get("status_json") is True
     assert availability.get("metadata_json") is True
+    artifacts = payload["artifacts"]
+    assert isinstance(artifacts, dict)
+    assert "resolved_md" in artifacts
+    assert "resolved_md" in availability
 
 
 @pytest.mark.integration

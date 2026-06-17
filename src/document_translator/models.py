@@ -56,6 +56,7 @@ class LLMUsage(BaseModel):
 
 class ArtifactPaths(BaseModel):
     final_output: Path | None = None
+    resolved_md: Path | None = None
     metadata_json: Path | None = None
     status_json: Path | None = None
 
@@ -72,6 +73,8 @@ class JobMetadata(BaseModel):
     is_legal_document: bool = False
     skipped_translation: bool = False
     no_translate: bool = False
+    save_resolved: bool = False
+    no_cover_page: bool = False
     model: str = DEFAULT_LLM_SELECTOR
     page_count: int | None = None
     chunk_count: int = 0
@@ -163,6 +166,8 @@ class TranslationOptions(BaseModel):
     translation_mode: TranslationMode = TranslationMode.QUICK
     translation_context: str | None = None
     no_translate: bool = False
+    save_resolved: bool = False
+    no_cover_page: bool = False
 
     @field_validator("translation_context", mode="before")
     @classmethod

@@ -38,3 +38,16 @@ def test_build_export_markdown_md_uses_separator(tmp_path: Path) -> None:
     body.write_text("Body text.\n", encoding="utf-8")
     combined = build_export_markdown("Cover line.", body, ExportFormat.MD)
     assert "\n\n---\n\n" in combined
+
+
+def test_build_export_markdown_body_only_when_no_cover(tmp_path: Path) -> None:
+    body = tmp_path / "body.md"
+    body.write_text("# Body\n\nTranslated text.\n", encoding="utf-8")
+    combined = build_export_markdown("", body, ExportFormat.PDF, include_cover=False)
+    assert combined == "# Body\n\nTranslated text.\n"
+    assert '<div class="cover-page">' not in combined
+    assert "\\newpage" not in combined
+
+    txt_combined = build_export_markdown("", body, ExportFormat.TXT, include_cover=False)
+    assert txt_combined == "# Body\n\nTranslated text.\n"
+    assert "---" not in txt_combined

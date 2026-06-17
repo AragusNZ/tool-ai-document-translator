@@ -143,7 +143,10 @@ class DocumentTranslationService:
             elapsed_seconds=metadata.duration_seconds,
         )
 
-        job_paths.cleanup_working_files(keep_work_files=self.config.keep_work_files)
+        job_paths.cleanup_working_files(
+            keep_work_files=self.config.keep_work_files,
+            keep_resolved=metadata.save_resolved,
+        )
         metadata.artifact_availability = job_paths.artifact_availability()
 
         issue_count = len(collector.to_list())
@@ -296,6 +299,8 @@ class DocumentTranslationService:
             translation_mode=opts.translation_mode.value,
             translation_context=opts.translation_context,
             job_timeout_seconds=self.config.job_timeout_seconds,
+            save_resolved=opts.save_resolved,
+            no_cover_page=opts.no_cover_page,
         )
 
         with sentry_translate_transaction(opts.job_id) as sentry_transaction:
@@ -696,32 +701,40 @@ class DocumentTranslationService:
         )
         try:
             metadata.issues = collector.to_list()
-            cover_md = generate_cover_markdown(
-                metadata,
-                discrepancies,
-                has_warnings=collector.has_warnings(),
-            )
-            if opts.target_lang != "en" and not opts.no_translate:
-                try:
-                    deadline.check(current_stage)
-                    cover_md = translate_cover_markdown(
-                        self.llm,
-                        cover_md,
-                        target_lang=opts.target_lang,
-                    )
-                except Exception as exc:
-                    collector.add(
-                        IssueCode.COVER_TRANSLATION_FAILED,
-                        IssueSeverity.WARN,
-                        f"Cover page translation failed; using English cover: {exc}",
-                        stage=PipelineStage.EXPORTING,
-                        cause=exc,
-                    )
-            combined_md = build_export_markdown(
-                cover_md,
-                job_paths.resolved_md,
-                job_paths.export_format,
-            )
+            if opts.no_cover_page:
+                combined_md = build_export_markdown(
+                    "",
+                    job_paths.resolved_md,
+                    job_paths.export_format,
+                    include_cover=False,
+                )
+            else:
+                cover_md = generate_cover_markdown(
+                    metadata,
+                    discrepancies,
+                    has_warnings=collector.has_warnings(),
+                )
+                if opts.target_lang != "en" and not opts.no_translate:
+                    try:
+                        deadline.check(current_stage)
+                        cover_md = translate_cover_markdown(
+                            self.llm,
+                            cover_md,
+                            target_lang=opts.target_lang,
+                        )
+                    except Exception as exc:
+                        collector.add(
+                            IssueCode.COVER_TRANSLATION_FAILED,
+                            IssueSeverity.WARN,
+                            f"Cover page translation failed; using English cover: {exc}",
+                            stage=PipelineStage.EXPORTING,
+                            cause=exc,
+                        )
+                combined_md = build_export_markdown(
+                    cover_md,
+                    job_paths.resolved_md,
+                    job_paths.export_format,
+                )
             job_paths.combined_export_md.write_text(combined_md, encoding="utf-8")
             export_markdown(
                 job_paths.combined_export_md,

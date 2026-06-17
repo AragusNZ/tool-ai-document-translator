@@ -141,7 +141,7 @@ def test_cli_text_output_success(tmp_path: Path, capsys: pytest.CaptureFixture[s
     metadata = JobMetadata(
         job_id="text-out",
         source_file="doc.txt",
-        artifact_availability={"final_output": True, "metadata_json": True, "status_json": True},
+        artifact_availability={"final_output": True, "resolved_md": False, "metadata_json": True, "status_json": True},
     )
     fake_result = JobResult(
         job_id="text-out",
@@ -521,6 +521,126 @@ def test_cli_no_translate_flag(tmp_path: Path) -> None:
 
     assert code == 0
     assert captured["options"].no_translate is True
+
+
+def test_cli_save_resolved_flag(tmp_path: Path) -> None:
+    doc = tmp_path / "doc.txt"
+    doc.write_text("hello", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    class FakeService:
+        def __init__(self, config: PipelineConfig) -> None:
+            pass
+
+        def translate(self, input_path: Path, options):  # noqa: ANN001
+            captured["options"] = options
+            metadata = JobMetadata(job_id="save-resolved-flag", source_file="doc.txt")
+            return JobResult(
+                job_id="save-resolved-flag",
+                status=JobStatus.COMPLETED,
+                artifacts=ArtifactPaths(),
+                metadata=metadata,
+            )
+
+    with patch("document_translator.cli.DocumentTranslationService", FakeService):
+        code = main(
+            [
+                "translate",
+                str(doc),
+                "--job-id",
+                "save-resolved-flag",
+                "--output-dir",
+                str(tmp_path / "runs"),
+                "--save-resolved",
+            ]
+        )
+
+    assert code == 0
+    assert captured["options"].save_resolved is True
+
+
+def test_cli_no_cover_page_flag(tmp_path: Path) -> None:
+    doc = tmp_path / "doc.txt"
+    doc.write_text("hello", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    class FakeService:
+        def __init__(self, config: PipelineConfig) -> None:
+            pass
+
+        def translate(self, input_path: Path, options):  # noqa: ANN001
+            captured["options"] = options
+            metadata = JobMetadata(job_id="no-cover-flag", source_file="doc.txt")
+            return JobResult(
+                job_id="no-cover-flag",
+                status=JobStatus.COMPLETED,
+                artifacts=ArtifactPaths(),
+                metadata=metadata,
+            )
+
+    with patch("document_translator.cli.DocumentTranslationService", FakeService):
+        code = main(
+            [
+                "translate",
+                str(doc),
+                "--job-id",
+                "no-cover-flag",
+                "--output-dir",
+                str(tmp_path / "runs"),
+                "--no-cover-page",
+            ]
+        )
+
+    assert code == 0
+    assert captured["options"].no_cover_page is True
+
+
+def test_cli_text_output_includes_resolved_path(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    doc = tmp_path / "doc.txt"
+    doc.write_text("hello", encoding="utf-8")
+    resolved = tmp_path / "runs" / "resolved-out" / "artifacts" / "04-resolved.md"
+    final = tmp_path / "runs" / "resolved-out" / "artifacts" / "05-final.pdf"
+
+    class FakeService:
+        def __init__(self, config: PipelineConfig) -> None:
+            pass
+
+        def translate(self, input_path: Path, options):  # noqa: ANN001
+            metadata = JobMetadata(
+                job_id="resolved-out",
+                source_file="doc.txt",
+                artifact_availability={
+                    "final_output": True,
+                    "resolved_md": True,
+                    "metadata_json": True,
+                    "status_json": True,
+                },
+            )
+            return JobResult(
+                job_id="resolved-out",
+                status=JobStatus.COMPLETED,
+                artifacts=ArtifactPaths(final_output=final, resolved_md=resolved),
+                metadata=metadata,
+            )
+
+    with patch("document_translator.cli.DocumentTranslationService", FakeService):
+        code = main(
+            [
+                "translate",
+                str(doc),
+                "--job-id",
+                "resolved-out",
+                "--output-dir",
+                str(tmp_path / "runs"),
+            ]
+        )
+
+    assert code == 0
+    out = capsys.readouterr().out
+    assert f"Final document: {final}" in out
+    assert f"Resolved markdown: {resolved}" in out
 
 
 def test_cli_no_translate_from_config(tmp_path: Path) -> None:
@@ -925,7 +1045,7 @@ def test_cli_warnings_text_output(tmp_path: Path, capsys: pytest.CaptureFixture[
     metadata = JobMetadata(
         job_id="warn-text",
         source_file="doc.txt",
-        artifact_availability={"final_output": False, "metadata_json": True, "status_json": True},
+        artifact_availability={"final_output": False, "resolved_md": False, "metadata_json": True, "status_json": True},
     )
     fake_result = JobResult(
         job_id="warn-text",

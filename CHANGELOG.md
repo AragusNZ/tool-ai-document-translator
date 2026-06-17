@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Per-LLM request timeout (`llm_request_timeout_seconds`) for OpenAI, Anthropic, and Google clients
 - Webhook delivery retries with exponential backoff (`webhook_max_retries`, `webhook_retry_base_delay`)
 - `--no-translate` flag to skip translation and export extracted text (extraction and detection still run)
+- `--save-resolved` flag to retain `04-resolved.md` as a terminal artifact (`artifacts.resolved_md` in JSON API)
+- `--no-cover-page` flag to export the document body without the cover page
 - CI: Python 3.11/3.12 matrix, ruff lint, pip-audit, Trivy image scan on release, workflow deduplication
 - `requirements-lock.txt` for pinned dependency installs; Docker base image digest pin
 - Pre-commit hooks (ruff + fast pytest) and Dependabot config

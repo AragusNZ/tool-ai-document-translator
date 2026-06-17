@@ -87,6 +87,7 @@ def test_pipeline_e2e_mock(spanish_contract: Path, tmp_path: Path) -> None:
     assert not (job_root / "input").exists()
     assert result.metadata.artifact_availability == {
         "final_output": True,
+        "resolved_md": False,
         "metadata_json": True,
         "status_json": True,
     }
@@ -318,6 +319,91 @@ def test_no_translate_skips_translation_and_exports(spanish_contract: Path, tmp_
     job_root = tmp_path / "runs" / "no-translate-job"
     resolved = (job_root / "artifacts" / "04-resolved.md").read_text(encoding="utf-8")
     assert "CONTRATO" in resolved or "contrato" in resolved.lower()
+
+
+@pytest.mark.integration
+def test_save_resolved_keeps_resolved_artifact(spanish_contract: Path, tmp_path: Path) -> None:
+    mock = MockLLMClient(prefix="[EN] ")
+    config = PipelineConfig(runs_dir=tmp_path / "runs", root=tmp_path)
+    service = DocumentTranslationService(config=config, llm=mock)
+
+    def _touch_export(source: Path, target: Path, fmt: ExportFormat, **kwargs: object) -> None:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("exported", encoding="utf-8")
+
+    with patch("document_translator.pipeline.export_markdown", side_effect=_touch_export):
+        result = service.translate(
+            spanish_contract,
+            TranslationOptions(job_id="save-resolved-job", save_resolved=True),
+        )
+
+    assert result.status == JobStatus.COMPLETED
+    assert result.metadata.save_resolved is True
+    assert result.metadata.artifact_availability["resolved_md"] is True
+    assert result.artifacts.resolved_md is not None
+
+    job_root = tmp_path / "runs" / "save-resolved-job"
+    assert (job_root / "artifacts" / "04-resolved.md").exists()
+    assert not (job_root / "artifacts" / "01-extracted.md").exists()
+
+
+@pytest.mark.integration
+def test_no_cover_page_exports_body_only(spanish_contract: Path, tmp_path: Path) -> None:
+    mock = MockLLMClient(prefix="[EN] ")
+    config = PipelineConfig(runs_dir=tmp_path / "runs", root=tmp_path, keep_work_files=True)
+    service = DocumentTranslationService(config=config, llm=mock)
+
+    captured_combined: list[str] = []
+
+    def _capture_export(source: Path, target: Path, fmt: ExportFormat, **kwargs: object) -> None:
+        captured_combined.append(source.read_text(encoding="utf-8"))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("exported", encoding="utf-8")
+
+    with patch("document_translator.pipeline.export_markdown", side_effect=_capture_export):
+        result = service.translate(
+            spanish_contract,
+            TranslationOptions(job_id="no-cover-job", no_cover_page=True),
+        )
+
+    assert result.status == JobStatus.COMPLETED
+    assert result.metadata.no_cover_page is True
+    assert len(captured_combined) == 1
+    combined = captured_combined[0]
+    assert "# Translation Summary" not in combined
+    assert '<div class="cover-page">' not in combined
+    assert "\\newpage" not in combined
+
+
+@pytest.mark.integration
+def test_save_resolved_and_no_cover_page_combined(spanish_contract: Path, tmp_path: Path) -> None:
+    mock = MockLLMClient(prefix="[EN] ")
+    config = PipelineConfig(runs_dir=tmp_path / "runs", root=tmp_path, keep_work_files=True)
+    service = DocumentTranslationService(config=config, llm=mock)
+
+    captured_combined: list[str] = []
+
+    def _capture_export(source: Path, target: Path, fmt: ExportFormat, **kwargs: object) -> None:
+        captured_combined.append(source.read_text(encoding="utf-8"))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("exported", encoding="utf-8")
+
+    with patch("document_translator.pipeline.export_markdown", side_effect=_capture_export):
+        result = service.translate(
+            spanish_contract,
+            TranslationOptions(
+                job_id="both-flags-job",
+                save_resolved=True,
+                no_cover_page=True,
+            ),
+        )
+
+    assert result.status == JobStatus.COMPLETED
+    assert result.metadata.save_resolved is True
+    assert result.metadata.no_cover_page is True
+    assert result.artifacts.resolved_md is not None
+    assert (tmp_path / "runs" / "both-flags-job" / "artifacts" / "04-resolved.md").exists()
+    assert "# Translation Summary" not in captured_combined[0]
 
 
 @pytest.mark.integration

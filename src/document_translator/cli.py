@@ -92,6 +92,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip translation; export extracted text without translating",
     )
     translate.add_argument(
+        "--save-resolved",
+        action="store_true",
+        help="Keep resolved markdown artifact (04-resolved.md) after job completes",
+    )
+    translate.add_argument(
+        "--no-cover-page",
+        action="store_true",
+        help="Export final document without the cover page",
+    )
+    translate.add_argument(
         "--timeout",
         type=float,
         default=None,
@@ -108,7 +118,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional HMAC secret for X-Document-Translator-Signature (DOCUMENT_TRANSLATOR_WEBHOOK_SECRET)",
     )
-    translate.add_argument("--config", type=Path, default=None, help="Optional JSON config (PipelineConfig + export_format + target_lang + source_lang + translation_context + translation_mode + no_translate + pdf_ocr + job_timeout_seconds + webhook_url + webhook_secret)")
+    translate.add_argument("--config", type=Path, default=None, help="Optional JSON config (PipelineConfig + export_format + target_lang + source_lang + translation_context + translation_mode + no_translate + save_resolved + no_cover_page + pdf_ocr + job_timeout_seconds + webhook_url + webhook_secret)")
 
     check = sub.add_parser("check", help="Verify system dependencies and configuration")
     check.add_argument("--format", choices=["text", "json"], default="text", help="Output format")
@@ -360,6 +370,14 @@ def _build_translation_options(
     if "no_translate" in config_overrides:
         no_translate = bool(config_overrides["no_translate"])
 
+    save_resolved = args.save_resolved
+    if "save_resolved" in config_overrides:
+        save_resolved = bool(config_overrides["save_resolved"])
+
+    no_cover_page = args.no_cover_page
+    if "no_cover_page" in config_overrides:
+        no_cover_page = bool(config_overrides["no_cover_page"])
+
     return TranslationOptions(
         job_id=job_id,
         force_overwrite=args.force_overwrite,
@@ -369,6 +387,8 @@ def _build_translation_options(
         translation_mode=translation_mode,
         translation_context=translation_context,
         no_translate=no_translate,
+        save_resolved=save_resolved,
+        no_cover_page=no_cover_page,
     )
 
 
@@ -384,6 +404,8 @@ def _print_job_result(result: JobResult, output_format: str) -> None:
             print(f"Final document: {result.artifacts.final_output}")
         elif result.status == JobStatus.COMPLETED_WITH_WARNINGS:
             print("Final document: not available (see metadata.json for warnings)", file=sys.stderr)
+        if availability.get("resolved_md"):
+            print(f"Resolved markdown: {result.artifacts.resolved_md}")
 
 
 def _print_batch_result(batch: BatchJobResult, output_format: str) -> None:
@@ -411,6 +433,8 @@ def _print_batch_result(batch: BatchJobResult, output_format: str) -> None:
                 "    Final document: not available (see metadata.json for warnings)",
                 file=sys.stderr,
             )
+        if availability.get("resolved_md"):
+            print(f"    Resolved markdown: {result.artifacts.resolved_md}")
 
 
 def _print_supported_llms(output_format: str) -> int:
