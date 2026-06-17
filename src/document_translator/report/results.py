@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-from document_translator.types import JobStatus
 from document_translator.config.languages import lang_display_name
 from document_translator.models import Discrepancy, DiscrepancySeverity, JobMetadata
+from document_translator.types import JobStatus
 
 
 def generate_results_markdown(
     metadata: JobMetadata,
     discrepancies: list[Discrepancy],
 ) -> str:
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     status = metadata.job_status.value if metadata.job_status else "unknown"
     lines = [
         "# Translation Results Report",

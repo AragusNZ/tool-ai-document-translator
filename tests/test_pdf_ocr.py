@@ -182,9 +182,9 @@ def test_extract_single_file_pdf_uses_configured_ocr_languages(minimal_pdf: Path
 def test_pipeline_emits_ocr_applied(minimal_pdf: Path, tmp_path: Path) -> None:
     from document_translator.errors import IssueCode
     from document_translator.extract.common import ExtractionResult
+    from document_translator.lib.llm import MockLLMClient
     from document_translator.models import TranslationOptions
     from document_translator.pipeline import DocumentTranslationService
-    from document_translator.lib.llm import MockLLMClient
 
     config = PipelineConfig(runs_dir=tmp_path / "runs", root=tmp_path)
     service = DocumentTranslationService(config=config, llm=MockLLMClient(prefix="[EN] "))
@@ -211,9 +211,9 @@ def test_pipeline_emits_ocr_applied(minimal_pdf: Path, tmp_path: Path) -> None:
 def test_pipeline_emits_ocr_unavailable(minimal_pdf: Path, tmp_path: Path) -> None:
     from document_translator.errors import IssueCode
     from document_translator.extract.common import ExtractionResult
+    from document_translator.lib.llm import MockLLMClient
     from document_translator.models import TranslationOptions
     from document_translator.pipeline import DocumentTranslationService
-    from document_translator.lib.llm import MockLLMClient
 
     config = PipelineConfig(runs_dir=tmp_path / "runs", root=tmp_path)
     service = DocumentTranslationService(config=config, llm=MockLLMClient(prefix="[EN] "))

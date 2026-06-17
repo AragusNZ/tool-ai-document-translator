@@ -6,7 +6,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from cursor_sdk import CursorAgentError, RateLimitError
 
 from document_translator.errors import IssueCode, PipelineError

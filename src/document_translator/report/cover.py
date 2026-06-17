@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from document_translator.errors import IssueSeverity
 from document_translator.config.languages import lang_display_name
+from document_translator.errors import IssueSeverity
 from document_translator.lib.llm.protocol import LLMClient
 from document_translator.models import Discrepancy, DiscrepancySeverity, JobMetadata, JobSummary
 from document_translator.types import JobStatus, TranslationMode
@@ -95,7 +95,7 @@ def generate_cover_markdown(
     *,
     has_warnings: bool,
 ) -> str:
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     summary = build_job_summary(metadata, discrepancies, has_warnings=has_warnings)
     target_label = lang_display_name(metadata.target_lang)
     lines = [

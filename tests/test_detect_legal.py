@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import json
 
-from document_translator.detect.legal import classify_legal_document, count_legal_keywords, is_legal_document
+from document_translator.detect.legal import (
+    classify_legal_document,
+    count_legal_keywords,
+    is_legal_document,
+)
 from document_translator.lib.llm import MockLLMClient
 
 

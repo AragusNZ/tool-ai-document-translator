@@ -7,17 +7,17 @@ from document_translator.lib.subprocess.libreoffice import convert_doc_to_docx
 from document_translator.lib.subprocess.pandoc import run_pandoc_to_markdown
 
 
-def extract_odt(path: Path) -> tuple[str, str]:
-    return run_pandoc_to_markdown(path), "pandoc"
+def extract_odt(path: Path, *, timeout_seconds: float | None = None) -> tuple[str, str]:
+    return run_pandoc_to_markdown(path, timeout_seconds=timeout_seconds), "pandoc"
 
 
-def extract_legacy_doc(path: Path) -> tuple[str, str]:
+def extract_legacy_doc(path: Path, *, timeout_seconds: float | None = None) -> tuple[str, str]:
     try:
-        return run_pandoc_to_markdown(path), "pandoc"
+        return run_pandoc_to_markdown(path, timeout_seconds=timeout_seconds), "pandoc"
     except RuntimeError:
         from document_translator.extract.docx import extract_docx
 
-        docx_path = convert_doc_to_docx(path)
+        docx_path = convert_doc_to_docx(path, timeout_seconds=timeout_seconds)
         try:
             text, _warnings = extract_docx(docx_path)
             return text, "libreoffice+docx"

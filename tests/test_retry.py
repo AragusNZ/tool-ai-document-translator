@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC
 from unittest.mock import patch
 
 import pytest
@@ -14,9 +15,9 @@ from document_translator.lib.llm.retry import (
 
 def test_parse_retry_after_http_date() -> None:
     with patch("document_translator.lib.llm.retry.datetime") as mock_dt:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        mock_dt.now.return_value = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        mock_dt.now.return_value = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
         mock_dt.now.side_effect = None
         # Wed, 21 Oct 2015 07:28:00 GMT is in the past relative to mock now
         result = parse_retry_after("Wed, 21 Oct 2015 07:28:00 GMT")

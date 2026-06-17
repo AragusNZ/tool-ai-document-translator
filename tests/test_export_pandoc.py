@@ -33,10 +33,10 @@ def test_convert_pandoc_failure(tmp_path: Path) -> None:
     target = tmp_path / "out.docx"
     with patch("document_translator.lib.subprocess.pandoc.shutil.which", return_value="/usr/bin/pandoc"):
         with patch(
-            "document_translator.lib.subprocess.pandoc.subprocess.run",
+            "document_translator.lib.subprocess.run.subprocess.run",
             return_value=subprocess.CompletedProcess([], 1, stderr="conversion failed"),
         ):
-            with pytest.raises(RuntimeError, match="pandoc failed"):
+            with pytest.raises(RuntimeError, match="pandoc export for doc.md failed"):
                 convert_markdown_with_pandoc(source, target, ExportFormat.DOCX)
 
 
@@ -55,7 +55,7 @@ def test_convert_success_mocked(tmp_path: Path, fmt: ExportFormat) -> None:
         return subprocess.CompletedProcess(cmd, 0)
 
     with patch("document_translator.lib.subprocess.pandoc.shutil.which", return_value="/usr/bin/pandoc"):
-        with patch("document_translator.lib.subprocess.pandoc.subprocess.run", side_effect=fake_run):
+        with patch("document_translator.lib.subprocess.run.subprocess.run", side_effect=fake_run):
             convert_markdown_with_pandoc(source, target, fmt)
 
     assert target.exists()

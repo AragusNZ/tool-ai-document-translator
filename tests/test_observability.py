@@ -8,8 +8,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from document_translator.errors import IssueCode, IssueSeverity
 from document_translator.config.settings import PipelineConfig
+from document_translator.errors import IssueCode, IssueSeverity
+from document_translator.lib.llm import MockLLMClient
 from document_translator.models import ExtractionAlert, TranslationOptions
 from document_translator.observability import (
     build_issue_listeners,
@@ -18,10 +19,9 @@ from document_translator.observability import (
 )
 from document_translator.observability.context import IssueContext
 from document_translator.observability.listeners import LoggingIssueListener, SentryIssueListener
-from document_translator.observability.logging_setup import JsonLogFormatter, configure_logging
+from document_translator.observability.logging_setup import JsonLogFormatter
 from document_translator.pipeline import DocumentTranslationService
 from document_translator.report.collector import IssueCollector
-from document_translator.lib.llm import MockLLMClient
 from document_translator.types import PipelineStage
 
 

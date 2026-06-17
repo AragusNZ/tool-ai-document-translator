@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import os
 
-from document_translator.errors import IssueCode, PipelineError
-from document_translator.lib.llm.protocol import LLMCallTracker
-from document_translator.lib.llm.retry import (
+from document_translator.config.defaults import (
+    DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS,
     DEFAULT_MAX_RETRIES,
     DEFAULT_RETRY_BASE_DELAY,
     DEFAULT_RETRY_MAX_DELAY,
+)
+from document_translator.errors import IssueCode, PipelineError
+from document_translator.lib.llm.protocol import LLMCallTracker
+from document_translator.lib.llm.retry import (
     is_retryable_http_status,
     retry_on_transient,
 )
@@ -24,6 +27,7 @@ class AnthropicLLMClient:
         max_retries: int = DEFAULT_MAX_RETRIES,
         retry_base_delay: float = DEFAULT_RETRY_BASE_DELAY,
         retry_max_delay: float = DEFAULT_RETRY_MAX_DELAY,
+        request_timeout_seconds: float = DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS,
     ) -> None:
         self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
         self.model = model
@@ -31,6 +35,7 @@ class AnthropicLLMClient:
         self.max_retries = max_retries
         self.retry_base_delay = retry_base_delay
         self.retry_max_delay = retry_max_delay
+        self.request_timeout_seconds = request_timeout_seconds
 
     def complete(self, system: str, user: str) -> str:
         if not self.api_key:
@@ -40,9 +45,9 @@ class AnthropicLLMClient:
                 stage=PipelineStage.TRANSLATING,
             )
 
-        from anthropic import APIStatusError, Anthropic
+        from anthropic import Anthropic, APIStatusError
 
-        client = Anthropic(api_key=self.api_key)
+        client = Anthropic(api_key=self.api_key, timeout=self.request_timeout_seconds)
         usage_holder: list[tuple[int, int]] = []
 
         def _call() -> str:

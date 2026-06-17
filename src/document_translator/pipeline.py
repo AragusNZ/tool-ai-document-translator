@@ -3,9 +3,11 @@ from __future__ import annotations
 import shutil
 import time
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
+from document_translator.config.formats import resolve_export_format
+from document_translator.config.settings import PipelineConfig
 from document_translator.detect.language import detect_language
 from document_translator.detect.legal import classify_legal_document
 from document_translator.errors import (
@@ -15,9 +17,8 @@ from document_translator.errors import (
     PipelineError,
     UnsupportedFormatError,
 )
+from document_translator.export.combine import build_export_markdown
 from document_translator.export.converter import export_markdown
-from document_translator.config.formats import resolve_export_format
-from document_translator.config.settings import PipelineConfig
 from document_translator.extract.common import (
     build_extracted_markdown,
     compute_extraction_alerts,
@@ -25,14 +26,16 @@ from document_translator.extract.common import (
     strip_front_matter,
     supported_extension,
 )
-from document_translator.observability import (
-    build_issue_listeners,
-    finish_sentry_transaction,
-    get_logger,
-    sentry_translate_transaction,
+from document_translator.lib.job_control import (
+    JobDeadline,
+    install_job_signal_handlers,
+    reset_job_control,
 )
-from document_translator.observability.context import IssueListener
-from document_translator.types import JobStatus, PipelineStage, TranslationMode
+from document_translator.lib.llm import LLMCallTracker, LLMClient, build_llm_client
+from document_translator.lib.llm.usage import sync_tracker_to_metadata
+from document_translator.lib.text.chunker import chunk_document, reassemble_chunks
+from document_translator.lib.validation import validate_input_file
+from document_translator.lib.webhook import deliver_terminal_webhook
 from document_translator.models import (
     BatchJobResult,
     Discrepancy,
@@ -42,6 +45,13 @@ from document_translator.models import (
     TranslationOptions,
     aggregate_job_status,
 )
+from document_translator.observability import (
+    build_issue_listeners,
+    finish_sentry_transaction,
+    get_logger,
+    sentry_translate_transaction,
+)
+from document_translator.observability.context import IssueListener
 from document_translator.reconcile.resolve import reconcile_translations
 from document_translator.report.collector import IssueCollector
 from document_translator.report.cover import (
@@ -49,17 +59,12 @@ from document_translator.report.cover import (
     generate_cover_markdown,
     translate_cover_markdown,
 )
-from document_translator.export.combine import build_export_markdown
 from document_translator.storage.paths import JobPaths
-from document_translator.lib.llm import LLMCallTracker, LLMClient, build_llm_client
-from document_translator.lib.llm.usage import sync_tracker_to_metadata
-from document_translator.lib.job_control import JobDeadline, install_job_signal_handlers, reset_job_control
-from document_translator.lib.webhook import deliver_terminal_webhook
-from document_translator.lib.text.chunker import chunk_document, reassemble_chunks
 from document_translator.translate.service import (
     build_document_summary,
     translate_source_chunks,
 )
+from document_translator.types import JobStatus, PipelineStage, TranslationMode
 
 logger = get_logger()
 
@@ -208,6 +213,8 @@ class DocumentTranslationService:
                 result,
                 secret=self.config.webhook_secret,
                 timeout_seconds=self.config.webhook_timeout_seconds,
+                max_retries=self.config.webhook_max_retries,
+                retry_base_delay=self.config.webhook_retry_base_delay,
             )
         except Exception as exc:
             logger.warning(
@@ -305,7 +312,7 @@ class DocumentTranslationService:
                     pipeline_state=pipeline_state,
                 )
             except Exception as exc:
-                metadata.completed_at = datetime.now(timezone.utc)
+                metadata.completed_at = datetime.now(UTC)
                 metadata.duration_seconds = time.monotonic() - started
                 sync_tracker_to_metadata(metadata, self._tracker, llm_selector=self.config.llm)
                 current_stage = pipeline_state["current_stage"]
@@ -410,9 +417,18 @@ class DocumentTranslationService:
             **status_kwargs(),
         )
 
+        try:
+            validate_input_file(input_path, max_bytes=self.config.max_input_bytes)
+        except ValueError as exc:
+            raise PipelineError(
+                str(exc),
+                code=IssueCode.CONFIGURATION_ERROR,
+                stage=PipelineStage.EXTRACTING,
+            ) from exc
+
         dest_input = job_paths.input_dir / input_path.name
         if input_path.resolve() != dest_input.resolve():
-            shutil.copy2(input_path, dest_input)
+            shutil.copy2(input_path, dest_input, follow_symlinks=False)
 
         deadline.check(current_stage)
         extraction = extract_single_file(dest_input, config=self.config)
@@ -710,6 +726,7 @@ class DocumentTranslationService:
                 job_paths.combined_export_md,
                 job_paths.final_output,
                 job_paths.export_format,
+                subprocess_timeout_seconds=self.config.subprocess_timeout_seconds,
             )
             metadata.final_exported = True
         except RuntimeError as exc:
@@ -723,7 +740,7 @@ class DocumentTranslationService:
             )
 
         sync_tracker_to_metadata(metadata, self._tracker, llm_selector=self.config.llm)
-        metadata.completed_at = datetime.now(timezone.utc)
+        metadata.completed_at = datetime.now(UTC)
         metadata.duration_seconds = time.monotonic() - started
 
         terminal_status = _resolve_terminal_status(collector)

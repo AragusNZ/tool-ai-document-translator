@@ -289,6 +289,8 @@ def run_pytest_gate(root: Path, *, force: bool) -> None:
             sys.executable,
             "-m",
             "pytest",
+            '-m',
+            "not integration",
             "--cov=document_translator",
             "--cov-report=term-missing",
             "--cov-fail-under=85",

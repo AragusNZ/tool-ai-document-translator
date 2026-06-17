@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
@@ -9,6 +10,29 @@ import pytest
 from document_translator.config.formats import ExportFormat
 from document_translator.config.settings import PipelineConfig
 from document_translator.lib.llm import MockLLMClient
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line("markers", "requires_pandoc: needs pandoc on PATH")
+    config.addinivalue_line("markers", "requires_weasyprint: needs weasyprint working")
+    config.addinivalue_line("markers", "requires_tesseract: needs tesseract-ocr on PATH")
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    skip_pandoc = pytest.mark.skip(reason="pandoc not installed")
+    skip_weasyprint = pytest.mark.skip(reason="weasyprint not available")
+    skip_tesseract = pytest.mark.skip(reason="tesseract not installed")
+
+    for item in items:
+        if "requires_pandoc" in item.keywords and shutil.which("pandoc") is None:
+            item.add_marker(skip_pandoc)
+        if "requires_weasyprint" in item.keywords:
+            try:
+                import weasyprint  # noqa: F401
+            except ImportError:
+                item.add_marker(skip_weasyprint)
+        if "requires_tesseract" in item.keywords and shutil.which("tesseract") is None:
+            item.add_marker(skip_tesseract)
 
 
 @pytest.fixture
@@ -49,8 +73,8 @@ def pipeline_config(tmp_path: Path) -> PipelineConfig:
 
 
 @pytest.fixture
-def touch_export() -> Callable[[Path, Path, ExportFormat], None]:
-    def _touch_export(source: Path, target: Path, fmt: ExportFormat) -> None:
+def touch_export() -> Callable[..., None]:
+    def _touch_export(source: Path, target: Path, fmt: ExportFormat, **kwargs: object) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("exported", encoding="utf-8")
 

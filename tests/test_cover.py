@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 from document_translator.errors import IssueCode, IssueSeverity, PipelineIssue
-from document_translator.models import Discrepancy, DiscrepancySeverity, ExtractionAlert, JobMetadata
+from document_translator.lib.llm import MockLLMClient
+from document_translator.models import (
+    Discrepancy,
+    DiscrepancySeverity,
+    ExtractionAlert,
+    JobMetadata,
+)
 from document_translator.report.cover import (
     build_cover_translation_system,
     build_job_summary,
     generate_cover_markdown,
     translate_cover_markdown,
 )
-from document_translator.lib.llm import MockLLMClient
 from document_translator.types import JobStatus, PipelineStage, TranslationMode
 
 

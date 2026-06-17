@@ -4,16 +4,17 @@ import os
 import time
 from pathlib import Path
 
-from document_translator.config.defaults import DEFAULT_TRANSLATION_MODEL
-from document_translator.errors import IssueCode, PipelineError
-from document_translator.lib.llm.protocol import LLMCallTracker
-from document_translator.lib.llm.tokens import estimate_tokens_from_text
-from document_translator.lib.llm.retry import (
+from document_translator.config.defaults import (
+    DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS,
     DEFAULT_MAX_RETRIES,
     DEFAULT_RETRY_BASE_DELAY,
     DEFAULT_RETRY_MAX_DELAY,
-    retry_delay_seconds,
+    DEFAULT_TRANSLATION_MODEL,
 )
+from document_translator.errors import IssueCode, PipelineError
+from document_translator.lib.llm.protocol import LLMCallTracker
+from document_translator.lib.llm.retry import retry_delay_seconds
+from document_translator.lib.llm.tokens import estimate_tokens_from_text
 from document_translator.observability.logging_setup import get_logger
 from document_translator.types import PipelineStage
 
@@ -31,6 +32,7 @@ class CursorLLMClient:
         max_retries: int = DEFAULT_MAX_RETRIES,
         retry_base_delay: float = DEFAULT_RETRY_BASE_DELAY,
         retry_max_delay: float = DEFAULT_RETRY_MAX_DELAY,
+        request_timeout_seconds: float = DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS,
     ) -> None:
         self.api_key = api_key or os.environ.get("CURSOR_API_KEY")
         self.model = model
@@ -39,6 +41,7 @@ class CursorLLMClient:
         self.max_retries = max_retries
         self.retry_base_delay = retry_base_delay
         self.retry_max_delay = retry_max_delay
+        self.request_timeout_seconds = request_timeout_seconds
 
     def complete(self, system: str, user: str) -> str:
         if not self.api_key:

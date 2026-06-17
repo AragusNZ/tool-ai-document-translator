@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from document_translator.export.combine import build_export_markdown
 from document_translator.config.formats import ExportFormat
+from document_translator.export.combine import build_export_markdown
 
 
 def test_build_export_markdown_pdf_wraps_cover(tmp_path: Path) -> None:

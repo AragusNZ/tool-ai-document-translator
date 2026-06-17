@@ -15,8 +15,8 @@ from document_translator.models import (
     TranslationOptions,
     aggregate_job_status,
 )
-from document_translator.types import JobStatus, TranslationMode
 from document_translator.pipeline import DocumentTranslationService
+from document_translator.types import JobStatus, TranslationMode
 
 
 def test_pipeline_config_resolve_runs_dir_relative(tmp_path: Path) -> None:

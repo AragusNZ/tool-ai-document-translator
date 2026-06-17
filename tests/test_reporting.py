@@ -6,9 +6,10 @@ from unittest.mock import patch
 
 import pytest
 
-from document_translator.errors import IssueCode, IssueSeverity
 from document_translator.config.formats import ExportFormat
 from document_translator.config.settings import PipelineConfig
+from document_translator.errors import IssueCode, IssueSeverity
+from document_translator.lib.llm import MockLLMClient
 from document_translator.models import (
     ArtifactPaths,
     Discrepancy,
@@ -21,7 +22,6 @@ from document_translator.pipeline import DocumentTranslationService
 from document_translator.report.collector import IssueCollector
 from document_translator.report.results import generate_results_markdown
 from document_translator.storage.paths import JobPaths
-from document_translator.lib.llm import MockLLMClient
 from document_translator.types import JobStatus, PipelineStage, TranslationMode
 
 
@@ -59,7 +59,7 @@ def test_pipeline_e2e_mock(spanish_contract: Path, tmp_path: Path) -> None:
     config = PipelineConfig(runs_dir=tmp_path / "runs", root=tmp_path)
     service = DocumentTranslationService(config=config, llm=mock)
 
-    def _touch_export(source: Path, target: Path, fmt: ExportFormat) -> None:
+    def _touch_export(source: Path, target: Path, fmt: ExportFormat, **kwargs: object) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("exported", encoding="utf-8")
         assert "Translation Summary" in source.read_text(encoding="utf-8")
@@ -216,7 +216,7 @@ def test_english_source_translates_when_target_not_english(english_doc: Path, tm
     config = PipelineConfig(runs_dir=tmp_path / "runs", root=tmp_path)
     service = DocumentTranslationService(config=config, llm=mock)
 
-    def _touch_export(source: Path, target: Path, fmt: ExportFormat) -> None:
+    def _touch_export(source: Path, target: Path, fmt: ExportFormat, **kwargs: object) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("exported", encoding="utf-8")
 
@@ -240,7 +240,7 @@ def test_cover_translated_in_final_export_for_non_english_target(
     config = PipelineConfig(runs_dir=tmp_path / "runs", root=tmp_path, keep_work_files=True)
     service = DocumentTranslationService(config=config, llm=mock)
 
-    def _touch_export(source: Path, target: Path, fmt: ExportFormat) -> None:
+    def _touch_export(source: Path, target: Path, fmt: ExportFormat, **kwargs: object) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("exported", encoding="utf-8")
 
@@ -262,7 +262,7 @@ def test_cover_translation_failure_falls_back_to_english(english_doc: Path, tmp_
     config = PipelineConfig(runs_dir=tmp_path / "runs", root=tmp_path, keep_work_files=True)
     service = DocumentTranslationService(config=config, llm=mock)
 
-    def _touch_export(source: Path, target: Path, fmt: ExportFormat) -> None:
+    def _touch_export(source: Path, target: Path, fmt: ExportFormat, **kwargs: object) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("exported", encoding="utf-8")
 
@@ -290,7 +290,7 @@ def test_spanish_source_skips_when_target_matches(spanish_contract: Path, tmp_pa
     config = PipelineConfig(runs_dir=tmp_path / "runs", root=tmp_path)
     service = DocumentTranslationService(config=config, llm=mock)
 
-    def _touch_export(source: Path, target: Path, fmt: ExportFormat) -> None:
+    def _touch_export(source: Path, target: Path, fmt: ExportFormat, **kwargs: object) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("exported", encoding="utf-8")
 
@@ -355,7 +355,7 @@ def test_english_source_skips_translation(english_doc: Path, tmp_path: Path) -> 
     config = PipelineConfig(runs_dir=tmp_path / "runs", root=tmp_path)
     service = DocumentTranslationService(config=config, llm=mock)
 
-    def _touch_export(source: Path, target: Path, fmt: ExportFormat) -> None:
+    def _touch_export(source: Path, target: Path, fmt: ExportFormat, **kwargs: object) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("exported", encoding="utf-8")
 
@@ -375,7 +375,7 @@ def test_identical_passes_no_discrepancies(spanish_contract: Path, tmp_path: Pat
     config = PipelineConfig(runs_dir=tmp_path / "runs", root=tmp_path)
     service = DocumentTranslationService(config=config, llm=mock)
 
-    def _touch_export(source: Path, target: Path, fmt: ExportFormat) -> None:
+    def _touch_export(source: Path, target: Path, fmt: ExportFormat, **kwargs: object) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("exported", encoding="utf-8")
 
@@ -396,7 +396,7 @@ def test_quick_mode_single_pass(spanish_contract: Path, tmp_path: Path) -> None:
     config = PipelineConfig(runs_dir=tmp_path / "runs", root=tmp_path)
     service = DocumentTranslationService(config=config, llm=mock)
 
-    def _touch_export(source: Path, target: Path, fmt: ExportFormat) -> None:
+    def _touch_export(source: Path, target: Path, fmt: ExportFormat, **kwargs: object) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("exported", encoding="utf-8")
 
@@ -415,7 +415,7 @@ def test_quick_mode_single_pass(spanish_contract: Path, tmp_path: Path) -> None:
         quick_calls = _translation_calls()
         mock.calls.clear()
         mock.tracker.count = 0
-        thorough_result = service.translate(
+        service.translate(
             spanish_contract,
             TranslationOptions(
                 job_id="thorough-mode-job",
@@ -457,7 +457,7 @@ def test_thorough_unresolved_breaking_count(spanish_contract: Path, tmp_path: Pa
         explanation="unresolved breaking test",
     )
 
-    def _touch_export(source: Path, target: Path, fmt: ExportFormat) -> None:
+    def _touch_export(source: Path, target: Path, fmt: ExportFormat, **kwargs: object) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("exported", encoding="utf-8")
 
@@ -490,7 +490,7 @@ def test_thorough_same_lang_skip(english_doc: Path, tmp_path: Path) -> None:
         captured_stages.append(stage.value)
         return original_write_status(self, stage, **kwargs)
 
-    def _touch_export(source: Path, target: Path, fmt: ExportFormat) -> None:
+    def _touch_export(source: Path, target: Path, fmt: ExportFormat, **kwargs: object) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("exported", encoding="utf-8")
 
@@ -528,7 +528,7 @@ def test_status_stage_progression(spanish_contract: Path, tmp_path: Path) -> Non
         captured_stages.append(stage.value)
         return original_write_status(self, stage, **kwargs)
 
-    def _touch_export(source: Path, target: Path, fmt: ExportFormat) -> None:
+    def _touch_export(source: Path, target: Path, fmt: ExportFormat, **kwargs: object) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("exported", encoding="utf-8")
 

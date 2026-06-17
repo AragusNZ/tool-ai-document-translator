@@ -9,7 +9,6 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from document_translator import __version__
-
 from document_translator.config.defaults import DEFAULT_TARGET_LANG
 from document_translator.config.formats import ExportFormat
 from document_translator.config.languages import normalize_lang_code
@@ -17,6 +16,11 @@ from document_translator.config.llms import supported_llms, validate_llm_selecto
 from document_translator.config.settings import PipelineConfig
 from document_translator.errors import ConfigurationError
 from document_translator.lib.preflight import run_preflight_checks
+from document_translator.lib.validation import (
+    resolve_job_root,
+    validate_input_file,
+    validate_job_id,
+)
 from document_translator.models import BatchJobResult, JobResult, TranslationOptions
 from document_translator.observability import configure_observability
 from document_translator.pipeline import DocumentTranslationService
@@ -171,16 +175,27 @@ def _resolve_job_ids(
         if len(job_ids) != len(set(job_ids)):
             print("Job IDs must be unique.", file=sys.stderr)
             return None
-        return job_ids
+        return _validate_job_id_list(job_ids)
 
     if input_count == 1:
-        return [job_id or str(uuid4())]
+        return _validate_job_id_list([job_id or str(uuid4())])
 
     if job_id is not None:
         print("Cannot use --job-id with multiple inputs; use --job-ids.", file=sys.stderr)
         return None
 
-    return [str(uuid4()) for _ in range(input_count)]
+    return _validate_job_id_list([str(uuid4()) for _ in range(input_count)])
+
+
+def _validate_job_id_list(job_ids: list[str]) -> list[str] | None:
+    validated: list[str] = []
+    for job_id in job_ids:
+        try:
+            validated.append(validate_job_id(job_id))
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return None
+    return validated
 
 
 def _preflight_translate_inputs(
@@ -188,15 +203,23 @@ def _preflight_translate_inputs(
     job_ids: list[str],
     runs_dir: Path,
     force_overwrite: bool,
+    *,
+    max_input_bytes: int | None,
 ) -> int | None:
     for input_path in inputs:
-        if not input_path.exists():
-            print(f"Input file not found: {input_path}", file=sys.stderr)
+        try:
+            validate_input_file(input_path, max_bytes=max_input_bytes)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
             return 1
 
     if not force_overwrite:
         for job_id in job_ids:
-            job_root = runs_dir / job_id
+            try:
+                job_root = resolve_job_root(runs_dir, job_id)
+            except ValueError as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
             if job_root.exists():
                 print(f"Job directory already exists: {job_root}. Use --force-overwrite.", file=sys.stderr)
                 return 1
@@ -229,9 +252,15 @@ def _load_translate_config(
             if timeout is not None and float(timeout) <= 0:
                 print("job_timeout_seconds must be positive", file=sys.stderr)
                 return None
-        for key, value in config_overrides.items():
-            if key in PipelineConfig.model_fields:
-                setattr(config, key, value)
+        config_fields = set(PipelineConfig.model_fields.keys())
+        config_values = {
+            key: value for key, value in config_overrides.items() if key in config_fields
+        }
+        try:
+            config = PipelineConfig.model_validate({**config.model_dump(), **config_values})
+        except ValidationError as exc:
+            print(str(exc), file=sys.stderr)
+            return None
 
     if args.llm is not None:
         try:
@@ -251,15 +280,17 @@ def _load_translate_config(
 
     if args.webhook_url is not None:
         try:
-            config.webhook_url = PipelineConfig.model_validate(
-                {"webhook_url": args.webhook_url}
-            ).webhook_url
+            config = PipelineConfig.model_validate(
+                {**config.model_dump(), "webhook_url": args.webhook_url}
+            )
         except ValidationError as exc:
             print(str(exc), file=sys.stderr)
             return None
 
     if args.webhook_secret is not None:
-        config.webhook_secret = args.webhook_secret
+        config = PipelineConfig.model_validate(
+            {**config.model_dump(), "webhook_secret": args.webhook_secret}
+        )
 
     return config, config_overrides
 
@@ -450,6 +481,7 @@ def main(argv: list[str] | None = None) -> int:
         job_ids,
         runs_dir,
         args.force_overwrite,
+        max_input_bytes=config.max_input_bytes,
     )
     if preflight_code is not None:
         return preflight_code

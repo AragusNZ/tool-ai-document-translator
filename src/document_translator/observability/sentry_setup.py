@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from document_translator.config.settings import PipelineConfig
@@ -20,9 +21,12 @@ def init_sentry(config: PipelineConfig) -> bool:
     except ImportError:
         return False
 
+    from document_translator.observability.sentry_scrub import scrub_sentry_event
+
     init_kwargs: dict[str, Any] = {
         "dsn": config.sentry_dsn,
         "traces_sample_rate": config.sentry_traces_sample_rate,
+        "before_send": scrub_sentry_event,
     }
     if config.sentry_environment:
         init_kwargs["environment"] = config.sentry_environment

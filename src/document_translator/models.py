@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -76,7 +76,7 @@ class JobMetadata(BaseModel):
     chunk_count: int = 0
     extraction_alerts: list[ExtractionAlert] = Field(default_factory=list)
     conversion_method: str | None = None
-    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     completed_at: datetime | None = None
     duration_seconds: float | None = None
     job_timeout_seconds: float | None = None

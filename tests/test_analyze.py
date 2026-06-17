@@ -1,3 +1,5 @@
+from document_translator.lib.llm import MockLLMClient
+from document_translator.models import DiscrepancySeverity
 from document_translator.reconcile.analyze import (
     adjudicate_translations_ai,
     analyze_semantic_equivalence,
@@ -7,8 +9,6 @@ from document_translator.reconcile.analyze import (
     programmatic_pick_variant,
     severity_from_str,
 )
-from document_translator.models import DiscrepancySeverity
-from document_translator.lib.llm import MockLLMClient
 
 
 def test_programmatic_pick_variant() -> None:

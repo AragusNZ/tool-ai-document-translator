@@ -6,14 +6,14 @@ from unittest.mock import patch
 
 import pytest
 
-from document_translator.cli import _aggregate_exit_code, _exit_code_for_status, main
 from document_translator import __version__
-from document_translator.errors import ConfigurationError, IssueCode
+from document_translator.cli import _aggregate_exit_code, _exit_code_for_status, main
+from document_translator.config.llms import supported_llms
 from document_translator.config.settings import PipelineConfig
+from document_translator.errors import ConfigurationError, IssueCode
+from document_translator.lib.llm import MockLLMClient
 from document_translator.models import ArtifactPaths, BatchJobResult, JobMetadata, JobResult
 from document_translator.types import JobStatus, TranslationMode
-from document_translator.config.llms import supported_llms
-from document_translator.lib.llm import MockLLMClient
 
 
 def test_cli_version(capsys: pytest.CaptureFixture[str]) -> None:

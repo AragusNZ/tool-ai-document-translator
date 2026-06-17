@@ -5,8 +5,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 from document_translator import __version__
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -74,3 +72,44 @@ def test_subprocess_check_json(tmp_path: Path) -> None:
     payload = json.loads(result.stdout)
     assert "checks" in payload
     assert isinstance(payload["checks"], list)
+
+
+def test_subprocess_translate_en_passthrough(tmp_path: Path) -> None:
+    doc = tmp_path / "english.txt"
+    doc.write_text(
+        "This is a plain English document used for subprocess integration testing. "
+        "It contains enough characters to satisfy language detection without AI fallback. "
+        "The content is informational only and describes routine operations.\n",
+        encoding="utf-8",
+    )
+    runs = tmp_path / "runs"
+    result = run_cli(
+        "translate",
+        str(doc),
+        "--job-id",
+        "subprocess-en-pass",
+        "--output-dir",
+        str(runs),
+        "--target-lang",
+        "en",
+        "--source-lang",
+        "en",
+        "--export-format",
+        "md",
+        "--format",
+        "json",
+        env={
+            "CURSOR_API_KEY": "",
+            "OPENAI_API_KEY": "",
+            "ANTHROPIC_API_KEY": "",
+            "GOOGLE_API_KEY": "",
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["job_id"] == "subprocess-en-pass"
+    assert payload["status"] == "completed"
+    status_path = runs / "subprocess-en-pass" / "status.json"
+    assert status_path.exists()
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    assert status["terminal_status"] == "completed"

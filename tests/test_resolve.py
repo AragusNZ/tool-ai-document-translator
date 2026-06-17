@@ -7,10 +7,10 @@ from unittest.mock import patch
 import pytest
 
 from document_translator.errors import ChunkCountMismatchError, IssueCode, PipelineError
+from document_translator.lib.llm import MockLLMClient
+from document_translator.lib.text.chunker import TextChunk
 from document_translator.models import Discrepancy
 from document_translator.reconcile.resolve import reconcile_translations, write_discrepancies
-from document_translator.lib.text.chunker import TextChunk
-from document_translator.lib.llm import MockLLMClient
 
 
 def _source_chunks() -> list[TextChunk]:

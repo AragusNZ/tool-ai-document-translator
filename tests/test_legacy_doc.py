@@ -24,7 +24,7 @@ def test_run_pandoc_failure(tmp_path: Path) -> None:
     src.write_text("data", encoding="utf-8")
     with patch("document_translator.lib.subprocess.pandoc.shutil.which", return_value="/usr/bin/pandoc"):
         with patch(
-            "document_translator.lib.subprocess.pandoc.subprocess.run",
+            "document_translator.lib.subprocess.run.subprocess.run",
             return_value=subprocess.CompletedProcess([], 1, stderr="conversion failed"),
         ):
             with pytest.raises(RuntimeError, match="pandoc conversion failed"):
@@ -41,7 +41,7 @@ def test_run_pandoc_success(tmp_path: Path) -> None:
         return subprocess.CompletedProcess(cmd, 0)
 
     with patch("document_translator.lib.subprocess.pandoc.shutil.which", return_value="/usr/bin/pandoc"):
-        with patch("document_translator.lib.subprocess.pandoc.subprocess.run", side_effect=fake_run):
+        with patch("document_translator.lib.subprocess.run.subprocess.run", side_effect=fake_run):
             result = run_pandoc_to_markdown(src)
 
     assert result == "Converted markdown body\n"
@@ -60,7 +60,7 @@ def test_run_libreoffice_failure(tmp_path: Path) -> None:
     doc.write_bytes(b"doc")
     with patch("document_translator.lib.subprocess.libreoffice.shutil.which", return_value="/usr/bin/libreoffice"):
         with patch(
-            "document_translator.lib.subprocess.libreoffice.subprocess.run",
+            "document_translator.lib.subprocess.run.subprocess.run",
             return_value=subprocess.CompletedProcess([], 1, stderr="soffice failed"),
         ):
             with pytest.raises(RuntimeError, match="libreoffice conversion failed"):
@@ -73,7 +73,7 @@ def test_run_libreoffice_missing_output(tmp_path: Path) -> None:
 
     with patch("document_translator.lib.subprocess.libreoffice.shutil.which", return_value="/usr/bin/libreoffice"):
         with patch(
-            "document_translator.lib.subprocess.libreoffice.subprocess.run",
+            "document_translator.lib.subprocess.run.subprocess.run",
             return_value=subprocess.CompletedProcess([], 0),
         ):
             with pytest.raises(RuntimeError, match="did not produce expected output"):
@@ -91,7 +91,7 @@ def test_run_libreoffice_success(tmp_path: Path) -> None:
         return subprocess.CompletedProcess(cmd, 0)
 
     with patch("document_translator.lib.subprocess.libreoffice.shutil.which", return_value="/usr/bin/libreoffice"):
-        with patch("document_translator.lib.subprocess.libreoffice.subprocess.run", side_effect=fake_run):
+        with patch("document_translator.lib.subprocess.run.subprocess.run", side_effect=fake_run):
             result_path = convert_doc_to_docx(doc)
 
     assert result_path.name == ".sample.converted.docx"
@@ -107,7 +107,7 @@ def test_extract_odt_delegates_to_pandoc(tmp_path: Path) -> None:
         return_value="converted\n",
     ) as pandoc:
         text, method = extract_odt(src)
-    pandoc.assert_called_once_with(src)
+    pandoc.assert_called_once_with(src, timeout_seconds=None)
     assert text == "converted\n"
     assert method == "pandoc"
 
@@ -120,7 +120,7 @@ def test_extract_legacy_doc_pandoc_path(tmp_path: Path) -> None:
         return_value="via pandoc\n",
     ) as pandoc:
         text, method = extract_legacy_doc(src)
-    pandoc.assert_called_once_with(src)
+    pandoc.assert_called_once_with(src, timeout_seconds=None)
     assert text == "via pandoc\n"
     assert method == "pandoc"
 

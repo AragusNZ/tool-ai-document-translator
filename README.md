@@ -259,7 +259,11 @@ Pass `--config path/to/config.json` to override `PipelineConfig` fields. Paths `
   "keep_work_files": false,
   "job_timeout_seconds": 3600,
   "webhook_url": "https://api.example.com/translations/webhook",
-  "webhook_secret": "your-hmac-secret"
+  "webhook_secret": "your-hmac-secret",
+  "webhook_https_only": true,
+  "max_input_bytes": 20000000,
+  "subprocess_timeout_seconds": 300,
+  "llm_request_timeout_seconds": 300
 }
 ```
 
@@ -278,8 +282,8 @@ document-translator translate <input> [<input> ...] [options]
 | Flag | Description |
 |------|-------------|
 | `input` | One or more paths to source documents (required) |
-| `--job-id UUID` | Job identifier for a single input; a UUID is generated if omitted |
-| `--job-ids UUID [UUID ...]` | Job identifier per input; count must match inputs; must be unique; UUIDs generated if omitted |
+| `--job-id UUID` | Job identifier for a single input (1–128 chars: letters, digits, `_`, `-`); a UUID is generated if omitted |
+| `--job-ids UUID [UUID ...]` | Job identifier per input; same character rules; count must match inputs; must be unique |
 | `--output-dir PATH` | Runs directory (default: `./runs` relative to project root) |
 | `--format {text,json}` | Stdout format on completion (default: `text`) |
 | `--export-format FORMAT` | Final document format: `pdf`, `docx`, `doc`, `odt`, `rtf`, `txt`, `md` (default: match input extension, else `pdf`) |
@@ -671,7 +675,7 @@ Release history: [CHANGELOG.md](CHANGELOG.md). In-flight changes go under `## [U
 Design principles:
 
 - **Subprocess-first** — Stateless CLI with filesystem artifacts; no embedded HTTP server required.
-- **Fail with context** — Structured `IssueCode` values, stage attribution, and preserved partial artifacts on failure.
+- **Fail with context** — Structured `IssueCode` values, stage attribution, and terminal `status.json` / `metadata.json` on failure. Intermediate working files are removed unless `keep_work_files` is enabled.
 - **Degrade gracefully** — Export failure yields `completed_with_warnings`; details are in `metadata.json`.
 - **Auditability** — Thorough mode dual passes plus embedded `metadata.discrepancies` provide a traceable quality trail.
 

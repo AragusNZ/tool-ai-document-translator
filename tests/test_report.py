@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from unittest.mock import patch
-
 from document_translator.errors import IssueCode, IssueSeverity
-from document_translator.models import Discrepancy, DiscrepancySeverity, ExtractionAlert, JobMetadata
+from document_translator.models import (
+    Discrepancy,
+    DiscrepancySeverity,
+    ExtractionAlert,
+    JobMetadata,
+)
 from document_translator.report.results import generate_results_markdown
 from document_translator.types import JobStatus
 

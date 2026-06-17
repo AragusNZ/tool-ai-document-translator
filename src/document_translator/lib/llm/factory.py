@@ -7,7 +7,7 @@ from document_translator.config.llms import LLMProvider, parse_llm_selector
 from document_translator.config.settings import PipelineConfig
 from document_translator.errors import IssueCode, PipelineError
 from document_translator.lib.llm.cursor import CursorLLMClient
-from document_translator.lib.llm.protocol import LLMClient, LLMCallTracker
+from document_translator.lib.llm.protocol import LLMCallTracker, LLMClient
 from document_translator.types import PipelineStage
 
 
@@ -25,6 +25,7 @@ def build_llm_client(
                 model=model,
                 cwd=cwd,
                 tracker=tracker,
+                request_timeout_seconds=config.llm_request_timeout_seconds,
             )
         case LLMProvider.OPENAI:
             _require_optional_dependency("openai", provider)
@@ -34,6 +35,7 @@ def build_llm_client(
                 api_key=config.openai_api_key,
                 model=model,
                 tracker=tracker,
+                request_timeout_seconds=config.llm_request_timeout_seconds,
             )
         case LLMProvider.ANTHROPIC:
             _require_optional_dependency("anthropic", provider)
@@ -43,6 +45,7 @@ def build_llm_client(
                 api_key=config.anthropic_api_key,
                 model=model,
                 tracker=tracker,
+                request_timeout_seconds=config.llm_request_timeout_seconds,
             )
         case LLMProvider.GOOGLE:
             _require_optional_dependency("google.genai", provider)
@@ -52,6 +55,7 @@ def build_llm_client(
                 api_key=config.google_api_key,
                 model=model,
                 tracker=tracker,
+                request_timeout_seconds=config.llm_request_timeout_seconds,
             )
         case _:
             raise PipelineError(

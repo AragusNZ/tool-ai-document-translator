@@ -81,10 +81,10 @@ def test_convert_pandoc_failure(tmp_path: Path) -> None:
     with patch("document_translator.export.pdf.shutil.which", return_value="/usr/bin/pandoc"):
         with patch("document_translator.export.pdf._ensure_weasyprint"):
             with patch(
-                "document_translator.export.pdf.subprocess.run",
+                "document_translator.lib.subprocess.run.subprocess.run",
                 return_value=subprocess.CompletedProcess([], 1, stderr="engine failed"),
             ):
-                with pytest.raises(RuntimeError, match="pandoc failed for doc.md"):
+                with pytest.raises(RuntimeError, match="pandoc PDF export for doc.md failed"):
                     convert_markdown_to_pdf(source, target)
 
 
@@ -104,7 +104,7 @@ def test_convert_success_mocked(tmp_path: Path) -> None:
 
     with patch("document_translator.export.pdf.shutil.which", return_value="/usr/bin/pandoc"):
         with patch("document_translator.export.pdf._ensure_weasyprint"):
-            with patch("document_translator.export.pdf.subprocess.run", side_effect=fake_run):
+            with patch("document_translator.lib.subprocess.run.subprocess.run", side_effect=fake_run):
                 convert_markdown_to_pdf(source, target, css_path=custom_css)
 
     assert target.exists()
@@ -124,7 +124,7 @@ def test_convert_uses_default_css_when_not_provided(tmp_path: Path) -> None:
 
     with patch("document_translator.export.pdf.shutil.which", return_value="/usr/bin/pandoc"):
         with patch("document_translator.export.pdf._ensure_weasyprint"):
-            with patch("document_translator.export.pdf.subprocess.run", side_effect=fake_run):
+            with patch("document_translator.lib.subprocess.run.subprocess.run", side_effect=fake_run):
                 convert_markdown_to_pdf(source, target)
 
     assert str(default_css_path()) in captured_cmd

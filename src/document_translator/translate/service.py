@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from document_translator.config.defaults import (
@@ -13,8 +12,8 @@ from document_translator.config.defaults import (
 )
 from document_translator.config.languages import lang_display_name
 from document_translator.errors import IssueCode, PipelineError
-from document_translator.lib.llm.protocol import LLMClient
 from document_translator.lib.job_control import JobDeadline
+from document_translator.lib.llm.protocol import LLMClient
 from document_translator.lib.text.chunker import TextChunk, chunk_document, reassemble_chunks
 from document_translator.types import PipelineStage
 

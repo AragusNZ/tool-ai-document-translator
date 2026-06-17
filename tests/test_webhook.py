@@ -11,7 +11,11 @@ from document_translator.cli import main
 from document_translator.config.settings import PipelineConfig
 from document_translator.errors import IssueCode
 from document_translator.lib.llm.mock import MockLLMClient
-from document_translator.lib.webhook import build_terminal_webhook_payload, deliver_terminal_webhook, sign_webhook_body
+from document_translator.lib.webhook import (
+    build_terminal_webhook_payload,
+    deliver_terminal_webhook,
+    sign_webhook_body,
+)
 from document_translator.models import ArtifactPaths, JobMetadata, JobResult, TranslationOptions
 from document_translator.pipeline import DocumentTranslationService
 from document_translator.types import JobStatus, TranslationMode
@@ -57,9 +61,9 @@ def test_deliver_terminal_webhook_posts_json() -> None:
         return response
 
     with patch("document_translator.lib.webhook.urllib.request.urlopen", side_effect=_fake_urlopen):
-        deliver_terminal_webhook("https://example.com/hook", result, secret="top-secret")
+        deliver_terminal_webhook("https://8.8.8.8/hook", result, secret="top-secret")
 
-    assert captured["url"] == "https://example.com/hook"
+    assert captured["url"] == "https://8.8.8.8/hook"
     body = captured["body"]
     assert isinstance(body, bytes)
     payload = json.loads(body)
@@ -82,10 +86,10 @@ def test_deliver_terminal_webhook_http_error() -> None:
 
     with patch(
         "document_translator.lib.webhook.urllib.request.urlopen",
-        side_effect=urllib.error.HTTPError("https://example.com/hook", 500, "error", {}, BytesIO(b"")),
+        side_effect=urllib.error.HTTPError("https://8.8.8.8/hook", 500, "error", {}, BytesIO(b"")),
     ):
         with pytest.raises(RuntimeError, match="HTTP 500"):
-            deliver_terminal_webhook("https://example.com/hook", result)
+            deliver_terminal_webhook("https://8.8.8.8/hook", result)
 
 
 def test_cli_invalid_webhook_url(tmp_path: Path) -> None:
@@ -110,7 +114,7 @@ def test_cli_invalid_webhook_url(tmp_path: Path) -> None:
 def test_pipeline_webhook_on_terminal_status(spanish_contract: Path, tmp_path: Path) -> None:
     config = PipelineConfig(
         runs_dir=tmp_path,
-        webhook_url="https://example.com/hook",
+        webhook_url="https://8.8.8.8/hook",
         webhook_secret="secret",
         chunk_size=500,
     )
@@ -136,7 +140,7 @@ def test_pipeline_webhook_on_terminal_status(spanish_contract: Path, tmp_path: P
 def test_pipeline_webhook_failure_records_warning(spanish_contract: Path, tmp_path: Path) -> None:
     config = PipelineConfig(
         runs_dir=tmp_path,
-        webhook_url="https://example.com/hook",
+        webhook_url="https://8.8.8.8/hook",
         chunk_size=500,
     )
     service = DocumentTranslationService(config=config, llm=MockLLMClient(prefix="[EN] "))

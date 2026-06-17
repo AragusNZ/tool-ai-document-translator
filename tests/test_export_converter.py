@@ -25,7 +25,7 @@ def test_export_markdown_pdf_delegates(tmp_path: Path) -> None:
     target = tmp_path / "out.pdf"
     with patch("document_translator.export.converter.convert_markdown_to_pdf") as mock_pdf:
         export_markdown(source, target, ExportFormat.PDF)
-    mock_pdf.assert_called_once_with(source, target)
+    mock_pdf.assert_called_once_with(source, target, timeout_seconds=None)
 
 
 @pytest.mark.parametrize("fmt", [ExportFormat.DOCX, ExportFormat.ODT, ExportFormat.RTF, ExportFormat.TXT])
@@ -35,7 +35,7 @@ def test_export_markdown_pandoc_formats(tmp_path: Path, fmt: ExportFormat) -> No
     target = tmp_path / f"out.{fmt.value}"
     with patch("document_translator.export.converter.convert_markdown_with_pandoc") as mock_pandoc:
         export_markdown(source, target, fmt)
-    mock_pandoc.assert_called_once_with(source, target, fmt)
+    mock_pandoc.assert_called_once_with(source, target, fmt, timeout_seconds=None)
 
 
 def test_export_markdown_doc_converts_via_docx(tmp_path: Path) -> None:
@@ -43,11 +43,11 @@ def test_export_markdown_doc_converts_via_docx(tmp_path: Path) -> None:
     source.write_text("# Title", encoding="utf-8")
     target = tmp_path / "out.doc"
 
-    def fake_pandoc(src: Path, docx_path: Path, fmt: ExportFormat) -> None:
+    def fake_pandoc(src: Path, docx_path: Path, fmt: ExportFormat, **kwargs: object) -> None:
         assert fmt == ExportFormat.DOCX
         docx_path.write_bytes(b"docx-bytes")
 
-    def fake_docx_to_doc(docx_path: Path, out: Path) -> None:
+    def fake_docx_to_doc(docx_path: Path, out: Path, **kwargs: object) -> None:
         assert docx_path.exists()
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"doc-bytes")
@@ -65,7 +65,7 @@ def test_export_markdown_doc_cleans_temp_docx(tmp_path: Path) -> None:
     target = tmp_path / "out.doc"
     temp_paths: list[Path] = []
 
-    def fake_pandoc(src: Path, docx_path: Path, fmt: ExportFormat) -> None:
+    def fake_pandoc(src: Path, docx_path: Path, fmt: ExportFormat, **kwargs: object) -> None:
         temp_paths.append(docx_path)
         docx_path.write_bytes(b"docx")
 
@@ -92,7 +92,7 @@ def test_convert_docx_to_doc_libreoffice_failure(tmp_path: Path) -> None:
     target = tmp_path / "file.doc"
     with patch("document_translator.lib.subprocess.libreoffice.shutil.which", return_value="/usr/bin/libreoffice"):
         with patch(
-            "document_translator.lib.subprocess.libreoffice.subprocess.run",
+            "document_translator.lib.subprocess.run.subprocess.run",
             return_value=subprocess.CompletedProcess([], 1, stderr="soffice failed"),
         ):
             with pytest.raises(RuntimeError, match="libreoffice conversion failed"):
@@ -105,7 +105,7 @@ def test_convert_docx_to_doc_missing_output(tmp_path: Path) -> None:
     target = tmp_path / "file.doc"
     with patch("document_translator.lib.subprocess.libreoffice.shutil.which", return_value="/usr/bin/libreoffice"):
         with patch(
-            "document_translator.lib.subprocess.libreoffice.subprocess.run",
+            "document_translator.lib.subprocess.run.subprocess.run",
             return_value=subprocess.CompletedProcess([], 0),
         ):
             with pytest.raises(RuntimeError, match="did not produce expected output"):
@@ -123,7 +123,7 @@ def test_convert_docx_to_doc_success(tmp_path: Path) -> None:
         return subprocess.CompletedProcess(cmd, 0)
 
     with patch("document_translator.lib.subprocess.libreoffice.shutil.which", return_value="/usr/bin/libreoffice"):
-        with patch("document_translator.lib.subprocess.libreoffice.subprocess.run", side_effect=fake_run):
+        with patch("document_translator.lib.subprocess.run.subprocess.run", side_effect=fake_run):
             convert_docx_to_doc(docx, target)
 
     assert target.read_bytes() == b"legacy-doc"

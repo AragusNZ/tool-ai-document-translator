@@ -8,7 +8,12 @@ import pytest
 from document_translator.config.formats import ExportFormat
 from document_translator.config.settings import PipelineConfig
 from document_translator.errors import IssueCode, JobCancelledError, JobTimeoutError
-from document_translator.lib.job_control import JobDeadline, is_job_cancelled, request_job_cancel, reset_job_control
+from document_translator.lib.job_control import (
+    JobDeadline,
+    is_job_cancelled,
+    request_job_cancel,
+    reset_job_control,
+)
 from document_translator.lib.preflight import CheckStatus, run_preflight_checks
 from document_translator.types import PipelineStage
 

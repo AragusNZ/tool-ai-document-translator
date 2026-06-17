@@ -4,8 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
-from document_translator.errors import IssueCode, PipelineError
 from document_translator.config.settings import PipelineConfig
+from document_translator.errors import IssueCode, PipelineError
 from document_translator.lib.llm import CursorLLMClient
 from document_translator.lib.llm.factory import build_llm_client
 from document_translator.lib.llm.protocol import LLMCallTracker

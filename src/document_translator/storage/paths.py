@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-from document_translator.errors import IssueCode
 from document_translator.config.formats import ExportFormat
+from document_translator.errors import IssueCode
+from document_translator.lib.validation import resolve_job_root
 from document_translator.models import ArtifactPaths
 from document_translator.types import JobStatus, PipelineStage
 
@@ -15,7 +16,7 @@ class JobPaths:
     def __init__(self, runs_dir: Path, job_id: str, *, export_format: ExportFormat) -> None:
         self.job_id = job_id
         self.export_format = export_format
-        self.root = runs_dir / job_id
+        self.root = resolve_job_root(runs_dir, job_id)
         self.input_dir = self.root / "input"
         self.artifacts_dir = self.root / "artifacts"
         self.status_json = self.root / "status.json"
@@ -23,8 +24,9 @@ class JobPaths:
         self.discrepancies_json = self.root / "discrepancies.json"
 
     def ensure_dirs(self) -> None:
-        self.input_dir.mkdir(parents=True, exist_ok=True)
-        self.artifacts_dir.mkdir(parents=True, exist_ok=True)
+        self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.input_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.artifacts_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 
     @property
     def extracted_md(self) -> Path:
@@ -117,7 +119,7 @@ class JobPaths:
             "error_code": error_code.value if error_code else None,
             "job_timeout_seconds": job_timeout_seconds,
             "elapsed_seconds": round(elapsed_seconds, 3) if elapsed_seconds is not None else None,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
         }
         tmp = self.status_json.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

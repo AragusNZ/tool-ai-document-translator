@@ -5,7 +5,10 @@ import re
 from pathlib import Path
 from typing import Any
 
-from document_translator.config.defaults import DEFAULT_PDF_OCR_LANGUAGES, PDF_OCR_MIN_CHARS_PER_PAGE
+from document_translator.config.defaults import (
+    DEFAULT_PDF_OCR_LANGUAGES,
+    PDF_OCR_MIN_CHARS_PER_PAGE,
+)
 from document_translator.lib.subprocess.tesseract import tesseract_available
 
 

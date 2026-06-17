@@ -1,4 +1,8 @@
-from document_translator.config.formats import ExportFormat, SUPPORTED_EXTENSIONS, resolve_export_format
+from document_translator.config.formats import (
+    SUPPORTED_EXTENSIONS,
+    ExportFormat,
+    resolve_export_format,
+)
 from document_translator.config.languages import lang_display_name, normalize_lang_code
 from document_translator.config.llms import LLMProvider, parse_llm_selector, supported_llms
 from document_translator.config.settings import PipelineConfig

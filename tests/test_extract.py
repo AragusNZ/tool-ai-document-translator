@@ -62,11 +62,11 @@ def test_strip_rtf_basic() -> None:
 def test_rtf_fallback_issues_issue(tmp_path: Path) -> None:
     from unittest.mock import patch
 
-    from document_translator.errors import IssueCode
     from document_translator.config.settings import PipelineConfig
+    from document_translator.errors import IssueCode
+    from document_translator.lib.llm import MockLLMClient
     from document_translator.models import TranslationOptions
     from document_translator.pipeline import DocumentTranslationService
-    from document_translator.lib.llm import MockLLMClient
 
     rtf = tmp_path / "doc.rtf"
     rtf.write_text(r"{\rtf1\ansi Hola mundo contractual agreement}", encoding="utf-8")

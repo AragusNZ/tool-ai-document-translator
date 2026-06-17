@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from document_translator.errors import IssueSeverity
 from document_translator.config.settings import PipelineConfig
+from document_translator.errors import IssueSeverity
 from document_translator.observability.context import IssueContext, IssueListener
 from document_translator.observability.listeners import LoggingIssueListener, SentryIssueListener
 from document_translator.observability.logging_setup import configure_logging, get_logger

@@ -1,13 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-from document_translator.extract.docx import extract_docx
-from document_translator.extract.legacy_doc import extract_legacy_doc, extract_odt
-from document_translator.extract.pdf import extract_pdf
-from document_translator.extract.rtf import strip_rtf
 from document_translator.config.defaults import (
     DEFAULT_PDF_OCR_LANGUAGES,
     LARGE_INPUT_BYTES,
@@ -16,6 +12,10 @@ from document_translator.config.defaults import (
 )
 from document_translator.config.formats import SUPPORTED_EXTENSIONS
 from document_translator.config.settings import PipelineConfig
+from document_translator.extract.docx import extract_docx
+from document_translator.extract.legacy_doc import extract_legacy_doc, extract_odt
+from document_translator.extract.pdf import extract_pdf
+from document_translator.extract.rtf import strip_rtf
 from document_translator.models import ExtractionAlert
 
 
@@ -96,10 +96,12 @@ def extract_single_file(path: Path, *, config: PipelineConfig | None = None) -> 
             conversion_warnings=tuple(warnings),
         )
     if suffix == ".doc":
-        text, method = extract_legacy_doc(path)
+        timeout = None if config is None else config.subprocess_timeout_seconds
+        text, method = extract_legacy_doc(path, timeout_seconds=timeout)
         return ExtractionResult(text=normalize_text(text), pages=None, bytes=file_bytes, conversion_method=method)
     if suffix == ".odt":
-        text, method = extract_odt(path)
+        timeout = None if config is None else config.subprocess_timeout_seconds
+        text, method = extract_odt(path, timeout_seconds=timeout)
         return ExtractionResult(text=normalize_text(text), pages=None, bytes=file_bytes, conversion_method=method)
 
     raise RuntimeError(f"Unsupported file type: {path.suffix}")
@@ -161,7 +163,7 @@ def build_extracted_markdown(
 
     front_matter = {
         "source_file": source_file,
-        "extracted_at": datetime.now(timezone.utc).isoformat(),
+        "extracted_at": datetime.now(UTC).isoformat(),
         "page_count": result.pages,
         "conversion_method": result.conversion_method,
         "extraction_alerts": [a.model_dump() for a in alerts],

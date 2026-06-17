@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import shutil
-import subprocess
 from pathlib import Path
+
+from document_translator.lib.subprocess.run import run_checked
 
 
 def default_css_path() -> Path:
@@ -19,7 +20,13 @@ def _ensure_weasyprint() -> None:
         ) from exc
 
 
-def convert_markdown_to_pdf(source: Path, target: Path, *, css_path: Path | None = None) -> None:
+def convert_markdown_to_pdf(
+    source: Path,
+    target: Path,
+    *,
+    css_path: Path | None = None,
+    timeout_seconds: float | None = None,
+) -> None:
     if shutil.which("pandoc") is None:
         raise RuntimeError("pandoc not found on PATH. Install with: sudo apt install pandoc")
 
@@ -36,7 +43,7 @@ def convert_markdown_to_pdf(source: Path, target: Path, *, css_path: Path | None
         str(css),
         "--standalone",
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        detail = (result.stderr or result.stdout or "unknown error").strip()
-        raise RuntimeError(f"pandoc failed for {source.name}: {detail}")
+    kwargs: dict[str, float] = {}
+    if timeout_seconds is not None:
+        kwargs["timeout_seconds"] = timeout_seconds
+    run_checked(cmd, label=f"pandoc PDF export for {source.name}", **kwargs)

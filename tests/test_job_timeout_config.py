@@ -8,7 +8,6 @@ import pytest
 
 from document_translator.cli import main
 from document_translator.config.settings import PipelineConfig
-from document_translator.errors import IssueCode
 from document_translator.lib.llm.mock import MockLLMClient
 from document_translator.models import TranslationOptions
 from document_translator.pipeline import DocumentTranslationService

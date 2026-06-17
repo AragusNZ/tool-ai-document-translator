@@ -5,8 +5,8 @@ import re
 
 from rapidfuzz import fuzz
 
-from document_translator.errors import IssueCode, IssueSeverity, PipelineIssue
 from document_translator.config.languages import lang_display_name
+from document_translator.errors import IssueCode, IssueSeverity, PipelineIssue
 from document_translator.lib.llm.protocol import LLMClient
 from document_translator.models import DiscrepancySeverity
 from document_translator.reconcile.compare import protected_tokens_differ

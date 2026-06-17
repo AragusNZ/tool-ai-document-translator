@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 
 from document_translator.errors import IssueCode, PipelineError
-from document_translator.lib.text.chunker import TextChunk, chunk_document
 from document_translator.lib.llm import MockLLMClient
+from document_translator.lib.text.chunker import TextChunk, chunk_document
 from document_translator.translate.service import (
     build_document_summary,
     build_third_pass_prompt,

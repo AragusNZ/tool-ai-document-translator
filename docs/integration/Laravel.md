@@ -180,6 +180,13 @@ export DOCUMENT_TRANSLATOR_SENTRY_REPORT_SEVERITIES=error,warn
 
 Instead of a host Python venv, the queue worker can run the published GHCR image via `docker run`. The image includes all LLM provider packages — pass `--llm` and the matching API key env var. Volume mounts, exit codes, and a PHP `Process` example: [Docker.md](Docker.md).
 
+## Security
+
+- Generate `job_id` values server-side (UUID recommended). The CLI rejects path segments such as `../outside` and limits IDs to `[A-Za-z0-9_-]{1,128}`.
+- Prefer `DOCUMENT_TRANSLATOR_WEBHOOK_SECRET` over `--webhook-secret` on the argv list.
+- Set `webhook_https_only: true` in config JSON for production webhooks.
+- See [SECURITY.md](../../SECURITY.md) for input validation, SSRF policy, and data egress.
+
 ## Database sketch
 
 | Column | Type | Notes |

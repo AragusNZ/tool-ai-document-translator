@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from document_translator.config.defaults import DEFAULT_SIMILARITY_THRESHOLD, DEFAULT_TARGET_LANG
 from document_translator.errors import ChunkCountMismatchError, IssueCode, PipelineError
-from document_translator.types import PipelineStage
+from document_translator.lib.job_control import JobDeadline
+from document_translator.lib.llm.protocol import LLMClient
+from document_translator.lib.text.chunker import TextChunk, reassemble_chunks
 from document_translator.models import Discrepancy, DiscrepancySeverity
-from document_translator.report.collector import IssueCollector
 from document_translator.reconcile.analyze import (
     adjudicate_translations_ai,
     analyze_semantic_equivalence,
@@ -15,11 +17,9 @@ from document_translator.reconcile.analyze import (
     severity_from_str,
 )
 from document_translator.reconcile.compare import compare_chunk_pair, split_sentences
-from document_translator.config.defaults import DEFAULT_SIMILARITY_THRESHOLD, DEFAULT_TARGET_LANG
-from document_translator.lib.llm.protocol import LLMClient
-from document_translator.lib.job_control import JobDeadline
-from document_translator.lib.text.chunker import TextChunk, reassemble_chunks
+from document_translator.report.collector import IssueCollector
 from document_translator.translate.service import build_third_pass_prompt, build_translation_system
+from document_translator.types import PipelineStage
 
 
 def reconcile_translations(

@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from document_translator.detect.language import detect_language
 from document_translator.lib.llm import MockLLMClient
 

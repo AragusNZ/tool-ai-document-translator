@@ -1,0 +1,19 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: ruff check src tests
+        language: system
+        types: [python]
+      - id: ruff-format
+        name: ruff format
+        entry: ruff format --check src tests
+        language: system
+        types: [python]
+      - id: pytest-fast
+        name: pytest fast suite
+        entry: pytest -m "not integration" -q
+        language: system
+        pass_filenames: false
+        always_run: true

@@ -4,9 +4,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from document_translator.errors import IssueCode, PipelineError
-from document_translator.lib.llm.protocol import LLMCallTracker
+from document_translator.errors import PipelineError
 from document_translator.lib.llm.openai import OpenAILLMClient
+from document_translator.lib.llm.protocol import LLMCallTracker
 from document_translator.lib.llm.retry import parse_retry_after, retry_delay_seconds
 
 
