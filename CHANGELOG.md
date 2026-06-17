@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Docker CI no longer pushes to GHCR on every `main` commit; image publish runs on `v*` tags only, with smoke tests on PRs and `main`
+
 ## [0.1.0] - 2026-06-17
 
 Initial Release
