@@ -44,7 +44,8 @@ $exitCode = $process->run();
 $output = json_decode($process->getOutput(), true);
 // Exit 0 = completed, 3 = completed_with_warnings (check artifact_availability.final_output)
 // When --save-resolved is used, also check artifact_availability.resolved_md and artifacts.resolved_md
-// Terminal API payload: metadata.json (includes summary, discrepancies, issues)
+// Optional LiteParse sidecars (when keep_work_files or mid-job): artifact_availability.extraction_layout_json, screenshots_dir
+// Terminal API payload: metadata.json (includes summary, discrepancies, issues, extract_backend, extract_page_stats)
 // User download: artifacts/05-final.{ext}
 if ($exitCode === 2) {
     throw new \RuntimeException($output['error_message'] ?? 'Translation failed');

@@ -6,7 +6,35 @@ from unittest.mock import patch
 
 import pytest
 
+from document_translator.config.formats import LITEPARSE_INPUT_SUFFIXES, SUPPORTED_INPUT_SUFFIXES
 from document_translator.extract.common import extract_single_file
+
+
+def test_supported_input_suffixes_include_liteparse_formats() -> None:
+    for suffix in LITEPARSE_INPUT_SUFFIXES:
+        assert suffix in SUPPORTED_INPUT_SUFFIXES
+
+
+def test_extract_liteparse_office_suffix_uses_backend(tmp_path: Path) -> None:
+    deck = tmp_path / "deck.pptx"
+    deck.write_bytes(b"PK")
+    from document_translator.extract.common import ExtractionResult
+
+    with patch(
+        "document_translator.extract.backends.liteparse.LiteParseBackend.extract",
+        return_value=ExtractionResult(
+            text="slide text\n",
+            pages=3,
+            bytes=2,
+            conversion_method="liteparse",
+            extract_backend="liteparse",
+        ),
+    ) as extract_mock:
+        result = extract_single_file(deck)
+
+    extract_mock.assert_called_once()
+    assert result.conversion_method == "liteparse"
+    assert "slide text" in result.text
 
 
 def test_extract_pdf(minimal_pdf: Path) -> None:

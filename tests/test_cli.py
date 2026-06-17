@@ -141,7 +141,7 @@ def test_cli_text_output_success(tmp_path: Path, capsys: pytest.CaptureFixture[s
     metadata = JobMetadata(
         job_id="text-out",
         source_file="doc.txt",
-        artifact_availability={"final_output": True, "resolved_md": False, "metadata_json": True, "status_json": True},
+        artifact_availability={"final_output": True, "resolved_md": False, "metadata_json": True, "status_json": True, "extraction_layout_json": False, "screenshots_dir": False},
     )
     fake_result = JobResult(
         job_id="text-out",
@@ -616,6 +616,8 @@ def test_cli_text_output_includes_resolved_path(
                     "resolved_md": True,
                     "metadata_json": True,
                     "status_json": True,
+                    "extraction_layout_json": False,
+                    "screenshots_dir": False,
                 },
             )
             return JobResult(
@@ -866,6 +868,78 @@ def test_cli_pdf_ocr_from_config(tmp_path: Path) -> None:
     assert captured["config"].pdf_ocr is False
 
 
+def test_cli_extract_backend_flag(tmp_path: Path) -> None:
+    doc = tmp_path / "doc.txt"
+    doc.write_text("hello", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    class FakeService:
+        def __init__(self, config: PipelineConfig) -> None:
+            captured["config"] = config
+
+        def translate(self, input_path: Path, options):  # noqa: ANN001
+            metadata = JobMetadata(job_id="extract-backend-flag", source_file="doc.txt")
+            return JobResult(
+                job_id="extract-backend-flag",
+                status=JobStatus.COMPLETED,
+                artifacts=ArtifactPaths(),
+                metadata=metadata,
+            )
+
+    with patch("document_translator.cli.DocumentTranslationService", FakeService):
+        code = main(
+            [
+                "translate",
+                str(doc),
+                "--job-id",
+                "extract-backend-flag",
+                "--output-dir",
+                str(tmp_path / "runs"),
+                "--extract-backend",
+                "liteparse",
+            ]
+        )
+
+    assert code == 0
+    assert captured["config"].extract_backend == "liteparse"
+
+
+def test_cli_extract_backend_from_config(tmp_path: Path) -> None:
+    doc = tmp_path / "doc.txt"
+    doc.write_text("hello", encoding="utf-8")
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps({"extract_backend": "pymupdf"}), encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    class FakeService:
+        def __init__(self, config: PipelineConfig) -> None:
+            captured["config"] = config
+
+        def translate(self, input_path: Path, options):  # noqa: ANN001
+            metadata = JobMetadata(job_id="extract-backend-cfg", source_file="doc.txt")
+            return JobResult(
+                job_id="extract-backend-cfg",
+                status=JobStatus.COMPLETED,
+                artifacts=ArtifactPaths(),
+                metadata=metadata,
+            )
+
+    with patch("document_translator.cli.DocumentTranslationService", FakeService):
+        code = main(
+            [
+                "translate",
+                str(doc),
+                "--job-id",
+                "extract-backend-cfg",
+                "--config",
+                str(config_file),
+            ]
+        )
+
+    assert code == 0
+    assert captured["config"].extract_backend == "pymupdf"
+
+
 def test_cli_invalid_translation_mode_in_config(tmp_path: Path) -> None:
     doc = tmp_path / "doc.txt"
     doc.write_text("hello", encoding="utf-8")
@@ -1045,7 +1119,7 @@ def test_cli_warnings_text_output(tmp_path: Path, capsys: pytest.CaptureFixture[
     metadata = JobMetadata(
         job_id="warn-text",
         source_file="doc.txt",
-        artifact_availability={"final_output": False, "resolved_md": False, "metadata_json": True, "status_json": True},
+        artifact_availability={"final_output": False, "resolved_md": False, "metadata_json": True, "status_json": True, "extraction_layout_json": False, "screenshots_dir": False},
     )
     fake_result = JobResult(
         job_id="warn-text",

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
+import shutil
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from document_translator.config.defaults import (
-    DEFAULT_PDF_OCR_LANGUAGES,
     LARGE_INPUT_BYTES,
     LOW_TEXT_DENSITY_CHARS_PER_PAGE,
     REPLACEMENT_CHAR,
@@ -14,9 +16,10 @@ from document_translator.config.formats import SUPPORTED_EXTENSIONS
 from document_translator.config.settings import PipelineConfig
 from document_translator.extract.docx import extract_docx
 from document_translator.extract.legacy_doc import extract_legacy_doc, extract_odt
-from document_translator.extract.pdf import extract_pdf
+from document_translator.extract.backends.routing import get_backend, resolve_backend_name, uses_backend_routing
 from document_translator.extract.rtf import strip_rtf
 from document_translator.models import ExtractionAlert
+from document_translator.storage.paths import JobPaths
 
 
 @dataclass(frozen=True)
@@ -29,6 +32,41 @@ class ExtractionResult:
     encoding_loss: bool = False
     ocr_pages: int = 0
     ocr_unavailable: bool = False
+    extract_backend: str | None = None
+    layout_text: str | None = None
+    layout_json: dict[str, Any] | None = None
+    screenshot_paths: tuple[Path, ...] = ()
+    screenshot_temp_dir: Path | None = None
+    extract_page_stats: tuple[dict[str, Any], ...] = ()
+
+
+def liteparse_only_options_active(config: PipelineConfig) -> list[str]:
+    options: list[str] = []
+    if config.target_pages:
+        options.append("target_pages")
+    if config.pdf_password:
+        options.append("pdf_password")
+    if config.extract_dpi is not None:
+        options.append("extract_dpi")
+    if config.extract_screenshots:
+        options.append("extract_screenshots")
+    return options
+
+
+def persist_extraction_sidecars(job_paths: JobPaths, extraction: ExtractionResult) -> None:
+    if extraction.layout_json is not None:
+        job_paths.extraction_layout_json.write_text(
+            json.dumps(extraction.layout_json, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+    if extraction.screenshot_paths:
+        job_paths.screenshots_dir.mkdir(parents=True, exist_ok=True)
+        for src in extraction.screenshot_paths:
+            shutil.copy2(src, job_paths.screenshots_dir / src.name)
+
+    if extraction.screenshot_temp_dir is not None and extraction.screenshot_temp_dir.exists():
+        shutil.rmtree(extraction.screenshot_temp_dir, ignore_errors=True)
 
 
 def normalize_text(text: str) -> str:
@@ -47,8 +85,12 @@ def extract_single_file(path: Path, *, config: PipelineConfig | None = None) -> 
     suffix = path.suffix.lower()
     conversion_warnings: list[str] = []
     encoding_loss = False
-    pdf_ocr = True if config is None else config.pdf_ocr
-    pdf_ocr_languages = DEFAULT_PDF_OCR_LANGUAGES if config is None else config.pdf_ocr_languages
+    effective_config = config or PipelineConfig()
+
+    if uses_backend_routing(suffix):
+        backend_name = resolve_backend_name(suffix, effective_config)
+        backend = get_backend(backend_name)
+        return backend.extract(path, config=effective_config)
 
     if suffix in {".txt", ".md", ".markdown"}:
         text, encoding_loss = _read_text_with_encoding_check(path)
@@ -58,21 +100,6 @@ def extract_single_file(path: Path, *, config: PipelineConfig | None = None) -> 
             bytes=file_bytes,
             conversion_method="direct",
             encoding_loss=encoding_loss,
-        )
-    if suffix == ".pdf":
-        text, pages, method, pdf_warnings, ocr_pages, ocr_unavailable = extract_pdf(
-            path,
-            ocr_enabled=pdf_ocr,
-            ocr_languages=pdf_ocr_languages,
-        )
-        return ExtractionResult(
-            text=text,
-            pages=pages,
-            bytes=file_bytes,
-            conversion_method=method,
-            conversion_warnings=tuple(pdf_warnings),
-            ocr_pages=ocr_pages,
-            ocr_unavailable=ocr_unavailable,
         )
     if suffix == ".rtf":
         raw = path.read_text(encoding="utf-8", errors="ignore")

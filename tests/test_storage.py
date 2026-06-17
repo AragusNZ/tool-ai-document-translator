@@ -74,11 +74,31 @@ def test_artifact_availability_terminal_keys(tmp_path: Path) -> None:
         terminal_status=JobStatus.COMPLETED,
     )
     availability = paths.artifact_availability()
-    assert set(availability.keys()) == {"final_output", "resolved_md", "metadata_json", "status_json"}
+    assert set(availability.keys()) == {
+        "final_output",
+        "resolved_md",
+        "metadata_json",
+        "status_json",
+        "extraction_layout_json",
+        "screenshots_dir",
+    }
     assert availability["final_output"] is True
     assert availability["resolved_md"] is False
     assert availability["metadata_json"] is True
     assert availability["status_json"] is True
+
+
+def test_cleanup_removes_extraction_sidecars(tmp_path: Path) -> None:
+    paths = JobPaths(tmp_path / "runs", "job-sidecars", export_format=ExportFormat.PDF)
+    paths.ensure_dirs()
+    paths.extraction_layout_json.write_text("{}", encoding="utf-8")
+    paths.screenshots_dir.mkdir(parents=True, exist_ok=True)
+    (paths.screenshots_dir / "page-0001.png").write_bytes(b"png")
+    paths.final_output.write_text("final", encoding="utf-8")
+    paths.cleanup_working_files()
+    assert not paths.extraction_layout_json.exists()
+    assert not paths.screenshots_dir.exists()
+    assert paths.final_output.exists()
 
 
 def test_cleanup_removes_legacy_artifact_paths(tmp_path: Path) -> None:

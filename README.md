@@ -61,7 +61,7 @@ Each job writes artifacts under a stable `runs/{job_id}/` layout so external orc
 
 ## Features
 
-- **Multi-format extraction** — PDF (PyMuPDF + optional Tesseract OCR), DOCX, legacy DOC, ODT, RTF, TXT, and Markdown
+- **Multi-format extraction** — PDF (PyMuPDF + optional Tesseract OCR), DOCX, legacy DOC, ODT, RTF, TXT, and Markdown; pluggable backends (`--extract-backend`) with optional LiteParse for advanced PDF/office/image parsing
 - **Selectable export format** — PDF, DOCX, DOC, ODT, RTF, TXT, or MD; defaults to matching the input extension
 - **Selectable target language** — ISO 639-1 codes via `--target-lang` or `target_lang` in config JSON (default `en`)
 - **Translation modes** — `quick` (single pass, default) or `thorough` (dual-pass verification and reconciliation)
@@ -93,6 +93,10 @@ Each job writes artifacts under a stable `runs/{job_id}/` layout so external orc
 | `.odt` | Pandoc | Requires `pandoc` on `PATH` |
 | `.rtf` | striprtf | Regex fallback if striprtf is unavailable |
 | `.txt`, `.md`, `.markdown` | Direct read | UTF-8 with replacement on invalid sequences |
+| `.pptx`, `.ppt`, `.xlsx`, `.xls` | LiteParse (optional) | Requires `[extract-liteparse]`, `libreoffice`, and Pandoc/WeasyPrint for PDF export; LibreOffice converts to PDF internally |
+| `.png`, `.jpg`, `.jpeg`, `.tiff`, `.webp` | LiteParse (optional) | Requires `[extract-liteparse]` and ImageMagick (`convert` or `magick` on `PATH`) |
+
+Office and image inputs use `--extract-backend auto` (default) or `liteparse`. PyMuPDF does not handle these suffixes.
 
 Unsupported extensions fail at extraction with `UNSUPPORTED_FORMAT`.
 
@@ -150,6 +154,8 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"     # development + tests
 # Optional LLM provider SDKs (included in published Docker image):
 pip install -e ".[openai]"    # or [anthropic], [google]
+# Optional LiteParse extraction backend (Rust wheels):
+pip install -e ".[extract-liteparse]"
 # Optional Sentry integration:
 pip install -e ".[monitoring]"
 ```
@@ -230,6 +236,11 @@ Settings are loaded from environment variables and optional JSON overrides. `Pip
 | `DOCUMENT_TRANSLATOR_FAIL_ON_EMPTY_EXTRACTION` | No | `false` | Fail the job if extraction yields no body text |
 | `DOCUMENT_TRANSLATOR_PDF_OCR` | No | `true` | Enable per-page OCR fallback for sparse PDF pages |
 | `DOCUMENT_TRANSLATOR_PDF_OCR_LANGUAGES` | No | `eng` | Tesseract language pack(s), e.g. `eng+spa` |
+| `DOCUMENT_TRANSLATOR_EXTRACT_BACKEND` | No | `auto` | Extraction backend: `auto`, `pymupdf`, or `liteparse` (requires `[extract-liteparse]`) |
+| `DOCUMENT_TRANSLATOR_TARGET_PAGES` | No | — | LiteParse page selector (e.g. `1-5,10`); ignored by pymupdf |
+| `DOCUMENT_TRANSLATOR_PDF_PASSWORD` | No | — | Password for encrypted PDFs (LiteParse backend only) |
+| `DOCUMENT_TRANSLATOR_EXTRACT_DPI` | No | — | Page render DPI for LiteParse extraction/screenshots |
+| `DOCUMENT_TRANSLATOR_EXTRACT_SCREENSHOTS` | No | `false` | Capture per-page PNG screenshots during LiteParse extraction |
 | `DOCUMENT_TRANSLATOR_KEEP_WORK_FILES` | No | `false` | Retain intermediate working files after job finalize (debug) |
 | `DOCUMENT_TRANSLATOR_JOB_TIMEOUT` / `JOB_TIMEOUT` | No | — | Maximum job duration in seconds (cooperative timeout between pipeline stages) |
 | `DOCUMENT_TRANSLATOR_WEBHOOK_URL` / `WEBHOOK_URL` | No | — | HTTPS URL to POST terminal job payload |
@@ -244,7 +255,7 @@ Settings are loaded from environment variables and optional JSON overrides. `Pip
 
 ### JSON config file
 
-Pass `--config path/to/config.json` to override `PipelineConfig` fields. Paths `runs_dir` and `root` are resolved as `Path` objects. The same file may include `export_format` (applied to `TranslationOptions` when `--export-format` is not set on the command line), `target_lang` (applied when `--target-lang` is not set), `source_lang` (applied when `--source-lang` is not set), `translation_context` (applied when `--translation-context` is not set), `translation_mode` (applied when `--mode` is not set), `no_translate` (applied when `--no-translate` is not set), `save_resolved` (applied when `--save-resolved` is not set), `no_cover_page` (applied when `--no-cover-page` is not set), and `pdf_ocr` (applied when `--no-pdf-ocr` is not set).
+Pass `--config path/to/config.json` to override `PipelineConfig` fields. Paths `runs_dir` and `root` are resolved as `Path` objects. The same file may include `export_format` (applied to `TranslationOptions` when `--export-format` is not set on the command line), `target_lang` (applied when `--target-lang` is not set), `source_lang` (applied when `--source-lang` is not set), `translation_context` (applied when `--translation-context` is not set), `translation_mode` (applied when `--mode` is not set), `no_translate` (applied when `--no-translate` is not set), `save_resolved` (applied when `--save-resolved` is not set), `no_cover_page` (applied when `--no-cover-page` is not set), `pdf_ocr` (applied when `--no-pdf-ocr` is not set), and `extract_backend` (applied when `--extract-backend` is not set).
 
 ```json
 {
@@ -298,12 +309,17 @@ document-translator translate <input> [<input> ...] [options]
 | `--save-resolved` | Keep resolved markdown (`04-resolved.md`) after job completes; path returned in CLI/JSON output |
 | `--no-cover-page` | Export final document without the cover page |
 | `--no-pdf-ocr` | Disable OCR fallback for scanned/image-only PDFs (PyMuPDF text extraction only) |
+| `--extract-backend {auto,pymupdf,liteparse}` | Extraction backend (`auto` uses PyMuPDF for PDF; LiteParse for office/image when installed) |
+| `--target-pages SPEC` | LiteParse page selector (e.g. `1-5,10`); limits extracted/translated body; pymupdf warns and ignores |
+| `--pdf-password PASSWORD` | Password for encrypted PDFs (LiteParse backend only) |
+| `--extract-dpi DPI` | Page render DPI for LiteParse extraction and screenshots |
+| `--extract-screenshots` | Write per-page PNGs to `artifacts/screenshots/` (LiteParse only; retained with `keep_work_files`) |
 | `--timeout SECONDS` | Maximum job duration; fails with `JOB_TIMEOUT` when exceeded (also `DOCUMENT_TRANSLATOR_JOB_TIMEOUT`) |
 | `--webhook-url URL` | POST terminal job payload to URL after job artifacts are written (`DOCUMENT_TRANSLATOR_WEBHOOK_URL`; `http://` or `https://`) |
 | `--webhook-secret SECRET` | Optional HMAC secret for `X-Document-Translator-Signature` (`DOCUMENT_TRANSLATOR_WEBHOOK_SECRET`) |
 | `--llm SELECTOR` | LLM as `provider:model` (e.g. `cursor:composer-2.5`, `openai:gpt-4o`) |
 | `--force-overwrite` | Overwrite an existing `runs/{job_id}/` directory |
-| `--config PATH` | JSON file with `PipelineConfig` overrides and optional `export_format` / `target_lang` / `source_lang` / `translation_context` / `translation_mode` / `no_translate` / `save_resolved` / `no_cover_page` / `pdf_ocr` / `job_timeout_seconds` / `webhook_url` / `webhook_secret` |
+| `--config PATH` | JSON file with `PipelineConfig` overrides and optional `export_format` / `target_lang` / `source_lang` / `translation_context` / `translation_mode` / `no_translate` / `save_resolved` / `no_cover_page` / `pdf_ocr` / `extract_backend` / `target_pages` / `pdf_password` / `extract_dpi` / `extract_screenshots` / `job_timeout_seconds` / `webhook_url` / `webhook_secret` |
 
 ### List LLMs
 
@@ -319,7 +335,7 @@ Prints the supported LLM catalog from `supported_llms()` (`provider:model`, labe
 document-translator check [--format {text,json}] [options]
 ```
 
-Verifies the host is ready to run translation jobs before accepting uploads. Checks pandoc, weasyprint (for PDF export), Tesseract (when PDF OCR is enabled), the selected LLM provider package and API key, and that the runs directory is writable.
+Verifies the host is ready to run translation jobs before accepting uploads. Checks pandoc, weasyprint (for PDF export), Tesseract (when PDF OCR is enabled), the selected LLM provider package and API key, LiteParse/LibreOffice/ImageMagick (when `--extract-backend` is `liteparse` or `auto`), and that the runs directory is writable.
 
 | Flag | Description |
 |------|-------------|
@@ -329,6 +345,7 @@ Verifies the host is ready to run translation jobs before accepting uploads. Che
 | `--output-dir PATH` | Runs directory to verify is writable |
 | `--require-ocr` | Treat missing Tesseract as a failure (default: warn when OCR enabled) |
 | `--no-pdf-ocr` | Skip Tesseract check |
+| `--extract-backend {auto,pymupdf,liteparse}` | Extraction backend setting; `liteparse` requires the optional extra and system tools (see preflight checks) |
 
 Exit code `0` when all required checks pass; `1` when any required check fails. JSON output includes `ready` and a `checks` array with `name`, `status` (`ok` / `warn` / `fail`), `message`, and `required`.
 
@@ -408,6 +425,8 @@ runs/{job_id}/
 
 During processing, intermediate files exist temporarily under `artifacts/` and `input/` but are removed on finalize.
 
+When LiteParse extraction produces spatial data, working artifacts include `01-extraction-layout.json` (page `text_items` with bounding boxes) and optionally `artifacts/screenshots/page-NNNN.png`. These are removed on finalize unless `keep_work_files` is enabled; `artifact_availability.extraction_layout_json` and `artifact_availability.screenshots_dir` reflect whether they were retained.
+
 `status.json` is written atomically (temp file + rename) after each stage transition.
 
 ### status.json
@@ -432,7 +451,7 @@ When the job finishes, `status` becomes `terminal` and `terminal_status` is one 
 
 ### metadata.json
 
-Includes `source_lang`, `source_lang_override`, `target_lang`, `translation_mode`, `translation_context`, `source_lang_confidence`, `is_legal_document`, `model`, `page_count`, `chunk_count`, `duration_seconds`, `job_timeout_seconds`, `llm_call_count`, `llm_usage` (`input_tokens`, `output_tokens`, `estimated_cost_usd`), `discrepancy_count`, `unresolved_breaking_count`, `export_format`, `final_exported`, `summary`, `discrepancies[]`, `issues[]`, `artifact_availability`, and on failure `error_code`, `error_message`, and `failed_stage`.
+Includes `source_lang`, `source_lang_override`, `target_lang`, `translation_mode`, `translation_context`, `source_lang_confidence`, `is_legal_document`, `model`, `page_count`, `extract_backend`, `extract_page_stats`, `chunk_count`, `duration_seconds`, `job_timeout_seconds`, `llm_call_count`, `llm_usage` (`input_tokens`, `output_tokens`, `estimated_cost_usd`), `discrepancy_count`, `unresolved_breaking_count`, `export_format`, `final_exported`, `summary`, `discrepancies[]`, `issues[]`, `artifact_availability`, and on failure `error_code`, `error_message`, and `failed_stage`.
 
 `summary` is a user-facing headline plus capped `warnings` and `review_items` lists for API consumers. The same information appears on the cover page of `05-final.{ext}` (the exported cover is translated into the target language when `--target-lang` is not `en`; `metadata.summary` stays in English for API stability).
 
@@ -456,6 +475,7 @@ Issues appear in `metadata.issues`, the CLI JSON payload, and optionally Sentry:
 | `EMPTY_EXTRACTION` | warn / error | No text extracted (`fail_on_empty_extraction` controls failure) |
 | `LOW_TEXT_DENSITY` | warn | Few characters per page — possible scanned PDF (OCR may not have helped) |
 | `OCR_APPLIED` | info | One or more PDF pages extracted via Tesseract OCR |
+| `EXTRACT_OPTION_IGNORED` | warn | LiteParse-only extract flag set while using pymupdf backend |
 | `OCR_UNAVAILABLE` | warn | Sparse PDF pages detected but Tesseract is not installed |
 | `LARGE_INPUT_FILE` | warn | Input exceeds 20 MB |
 | `ENCODING_LOSS` | warn | Invalid UTF-8 replaced during read |
@@ -600,6 +620,8 @@ Quick start:
 
 ```bash
 docker build -t document-translator .
+# Optional LiteParse backend (Apache-2.0 — see THIRD_PARTY_NOTICES.md):
+docker build --build-arg WITH_LITEPARSE=1 -t document-translator:liteparse .
 docker run --rm document-translator --version
 docker run --rm document-translator list-llms
 
@@ -702,3 +724,5 @@ Fork, branch, run `pytest --cov-fail-under=85`, update [README.md](README.md) an
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+Optional dependencies and redistribution obligations (including LiteParse / Apache-2.0 when using `[extract-liteparse]` or `WITH_LITEPARSE=1` Docker builds) are documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

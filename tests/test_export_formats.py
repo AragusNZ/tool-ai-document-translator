@@ -18,6 +18,9 @@ from document_translator.config.formats import ExportFormat, resolve_export_form
         (".txt", ExportFormat.TXT),
         (".md", ExportFormat.MD),
         (".markdown", ExportFormat.MD),
+        (".pptx", ExportFormat.PDF),
+        (".png", ExportFormat.PDF),
+        (".xlsx", ExportFormat.PDF),
     ],
 )
 def test_resolve_export_format_from_input_suffix(tmp_path: Path, suffix: str, expected: ExportFormat) -> None:

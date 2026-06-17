@@ -168,3 +168,71 @@ def test_preflight_odt_export_requires_pandoc(tmp_path: Path) -> None:
 
     assert not result.ready
     assert any(check.name == "pandoc" and check.status == CheckStatus.FAIL for check in result.checks)
+
+
+def test_preflight_liteparse_backend_requires_stack(tmp_path: Path) -> None:
+    import importlib
+
+    config = PipelineConfig(
+        runs_dir=tmp_path / "runs",
+        llm="cursor:composer-2.5",
+        cursor_api_key="key",
+        pdf_ocr=False,
+        extract_backend="liteparse",
+    )
+
+    def _which(cmd: str) -> str | None:
+        if cmd in {"pandoc", "convert"}:
+            return f"/usr/bin/{cmd}"
+        return None
+
+    def _import_module(name: str, *args, **kwargs):  # noqa: ANN002, ANN003
+        if name == "liteparse":
+            raise ImportError("no liteparse")
+        return importlib.import_module(name, *args, **kwargs)
+
+    with (
+        patch("document_translator.lib.preflight.shutil.which", side_effect=_which),
+        patch("document_translator.lib.preflight.import_module", side_effect=_import_module),
+        patch.dict("sys.modules", {"weasyprint": object()}),
+    ):
+        result = run_preflight_checks(config, export_format=ExportFormat.PDF)
+
+    assert not result.ready
+    liteparse = next(check for check in result.checks if check.name == "liteparse")
+    assert liteparse.status == CheckStatus.FAIL
+    libreoffice = next(check for check in result.checks if check.name == "libreoffice")
+    assert libreoffice.status == CheckStatus.FAIL
+    imagemagick = next(check for check in result.checks if check.name == "imagemagick")
+    assert imagemagick.status == CheckStatus.OK
+
+
+def test_preflight_auto_backend_warns_on_missing_liteparse_stack(tmp_path: Path) -> None:
+    import importlib
+
+    config = PipelineConfig(
+        runs_dir=tmp_path / "runs",
+        llm="cursor:composer-2.5",
+        cursor_api_key="key",
+        pdf_ocr=False,
+        extract_backend="auto",
+    )
+
+    def _import_module(name: str, *args, **kwargs):  # noqa: ANN002, ANN003
+        if name == "liteparse":
+            raise ImportError("no liteparse")
+        return importlib.import_module(name, *args, **kwargs)
+
+    with (
+        patch("document_translator.lib.preflight.shutil.which", return_value=None),
+        patch("document_translator.lib.preflight.import_module", side_effect=_import_module),
+        patch.dict("sys.modules", {"weasyprint": object()}),
+    ):
+        result = run_preflight_checks(config, export_format=ExportFormat.MD)
+
+    assert result.ready
+    liteparse = next(check for check in result.checks if check.name == "liteparse")
+    assert liteparse.status == CheckStatus.WARN
+    assert liteparse.required is False
+    imagemagick = next(check for check in result.checks if check.name == "imagemagick")
+    assert imagemagick.status == CheckStatus.WARN

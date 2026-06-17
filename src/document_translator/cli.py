@@ -87,6 +87,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="Disable OCR fallback for scanned/image-only PDFs (PyMuPDF text extraction only)",
     )
     translate.add_argument(
+        "--extract-backend",
+        choices=["auto", "pymupdf", "liteparse"],
+        default=None,
+        help="Extraction backend: auto (default), pymupdf, or liteparse (requires [extract-liteparse] extra)",
+    )
+    translate.add_argument(
+        "--target-pages",
+        default=None,
+        help='LiteParse page selector (e.g. "1-5,10"); ignored by pymupdf backend',
+    )
+    translate.add_argument(
+        "--pdf-password",
+        default=None,
+        help="Password for encrypted PDFs (LiteParse backend only)",
+    )
+    translate.add_argument(
+        "--extract-dpi",
+        type=float,
+        default=None,
+        metavar="DPI",
+        help="Page render DPI for LiteParse extraction/screenshots",
+    )
+    translate.add_argument(
+        "--extract-screenshots",
+        action="store_true",
+        help="Capture per-page PNG screenshots during LiteParse extraction",
+    )
+    translate.add_argument(
         "--no-translate",
         action="store_true",
         help="Skip translation; export extracted text without translating",
@@ -118,7 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional HMAC secret for X-Document-Translator-Signature (DOCUMENT_TRANSLATOR_WEBHOOK_SECRET)",
     )
-    translate.add_argument("--config", type=Path, default=None, help="Optional JSON config (PipelineConfig + export_format + target_lang + source_lang + translation_context + translation_mode + no_translate + save_resolved + no_cover_page + pdf_ocr + job_timeout_seconds + webhook_url + webhook_secret)")
+    translate.add_argument("--config", type=Path, default=None, help="Optional JSON config (PipelineConfig + export_format + target_lang + source_lang + translation_context + translation_mode + no_translate + save_resolved + no_cover_page + pdf_ocr + extract_backend + target_pages + pdf_password + extract_dpi + extract_screenshots + job_timeout_seconds + webhook_url + webhook_secret)")
 
     check = sub.add_parser("check", help="Verify system dependencies and configuration")
     check.add_argument("--format", choices=["text", "json"], default="text", help="Output format")
@@ -143,6 +171,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-pdf-ocr",
         action="store_true",
         help="Skip Tesseract check (matches translate --no-pdf-ocr)",
+    )
+    check.add_argument(
+        "--extract-backend",
+        choices=["auto", "pymupdf", "liteparse"],
+        default=None,
+        help="Extraction backend to validate (default: from config / auto)",
     )
 
     list_llms = sub.add_parser("list-llms", help="List supported LLM selectors")
@@ -286,6 +320,24 @@ def _load_translate_config(
 
     if args.no_pdf_ocr:
         config.pdf_ocr = False
+
+    if args.extract_backend is not None:
+        config.extract_backend = args.extract_backend
+
+    if args.target_pages is not None:
+        config.target_pages = args.target_pages
+
+    if args.pdf_password is not None:
+        config.pdf_password = args.pdf_password
+
+    if args.extract_dpi is not None:
+        if args.extract_dpi <= 0:
+            print("--extract-dpi must be a positive number", file=sys.stderr)
+            return None
+        config.extract_dpi = args.extract_dpi
+
+    if args.extract_screenshots:
+        config.extract_screenshots = True
 
     if args.timeout is not None:
         if args.timeout <= 0:
@@ -459,6 +511,8 @@ def _run_check(args: argparse.Namespace) -> int:
             return 1
     if args.no_pdf_ocr:
         config.pdf_ocr = False
+    if args.extract_backend is not None:
+        config.extract_backend = args.extract_backend
 
     export_format: ExportFormat | None = None
     if args.export_format is not None:

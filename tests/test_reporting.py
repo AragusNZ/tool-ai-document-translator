@@ -90,6 +90,8 @@ def test_pipeline_e2e_mock(spanish_contract: Path, tmp_path: Path) -> None:
         "resolved_md": False,
         "metadata_json": True,
         "status_json": True,
+        "extraction_layout_json": False,
+        "screenshots_dir": False,
     }
     metadata_payload = json.loads(result.artifacts.metadata_json.read_text())  # type: ignore[union-attr]
     assert "discrepancies" in metadata_payload

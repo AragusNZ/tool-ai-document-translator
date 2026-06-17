@@ -33,6 +33,14 @@ class JobPaths:
         return self.artifacts_dir / "01-extracted.md"
 
     @property
+    def extraction_layout_json(self) -> Path:
+        return self.artifacts_dir / "01-extraction-layout.json"
+
+    @property
+    def screenshots_dir(self) -> Path:
+        return self.artifacts_dir / "screenshots"
+
+    @property
     def translation_1_md(self) -> Path:
         return self.artifacts_dir / "02-translation-1.md"
 
@@ -65,16 +73,22 @@ class JobPaths:
         )
 
     def artifact_availability(self) -> dict[str, bool]:
+        screenshots_available = (
+            self.screenshots_dir.is_dir() and any(self.screenshots_dir.iterdir())
+        )
         return {
             "final_output": self.final_output.exists(),
             "resolved_md": self.resolved_md.exists(),
             "metadata_json": self.metadata_json.exists(),
             "status_json": self.status_json.exists(),
+            "extraction_layout_json": self.extraction_layout_json.exists(),
+            "screenshots_dir": screenshots_available,
         }
 
     def working_file_paths(self) -> list[Path]:
         return [
             self.extracted_md,
+            self.extraction_layout_json,
             self.translation_1_md,
             self.translation_2_md,
             self.resolved_md,
@@ -82,6 +96,9 @@ class JobPaths:
             self.results_md,
             self.discrepancies_json,
         ]
+
+    def working_file_dirs(self) -> list[Path]:
+        return [self.screenshots_dir]
 
     def cleanup_working_files(self, *, keep_work_files: bool = False, keep_resolved: bool = False) -> None:
         if keep_work_files:
@@ -95,6 +112,10 @@ class JobPaths:
             if keep_resolved and path == self.resolved_md:
                 continue
             _safe_unlink(path)
+
+        for directory in self.working_file_dirs():
+            if directory.exists() and self.root in directory.parents:
+                shutil.rmtree(directory, ignore_errors=True)
 
         if self.input_dir.exists() and self.root in self.input_dir.parents:
             shutil.rmtree(self.input_dir, ignore_errors=True)

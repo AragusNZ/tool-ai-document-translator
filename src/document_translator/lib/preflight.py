@@ -106,19 +106,64 @@ def _check_tesseract(*, required: bool) -> PreflightCheck:
     )
 
 
-def _check_libreoffice() -> PreflightCheck:
-    if shutil.which("libreoffice") is None and shutil.which("soffice") is None:
+def _libreoffice_available() -> bool:
+    return shutil.which("libreoffice") is not None or shutil.which("soffice") is not None
+
+
+def _imagemagick_available() -> bool:
+    return shutil.which("convert") is not None or shutil.which("magick") is not None
+
+
+def _check_libreoffice(*, required: bool, context: str) -> PreflightCheck:
+    if _libreoffice_available():
         return PreflightCheck(
             name="libreoffice",
-            status=CheckStatus.WARN,
-            message="libreoffice not found on PATH (legacy .doc input/export may fail)",
-            required=False,
+            status=CheckStatus.OK,
+            message=f"libreoffice is available ({context})",
+            required=required,
         )
     return PreflightCheck(
         name="libreoffice",
+        status=CheckStatus.FAIL if required else CheckStatus.WARN,
+        message=f"libreoffice not found on PATH ({context})",
+        required=required,
+    )
+
+
+def _check_imagemagick(*, required: bool) -> PreflightCheck:
+    if _imagemagick_available():
+        return PreflightCheck(
+            name="imagemagick",
+            status=CheckStatus.OK,
+            message="ImageMagick is available (convert or magick on PATH)",
+            required=required,
+        )
+    return PreflightCheck(
+        name="imagemagick",
+        status=CheckStatus.FAIL if required else CheckStatus.WARN,
+        message="ImageMagick not found on PATH (image inputs need convert or magick)",
+        required=required,
+    )
+
+
+def _check_liteparse(*, required: bool) -> PreflightCheck:
+    try:
+        import_module("liteparse")
+    except ImportError:
+        return PreflightCheck(
+            name="liteparse",
+            status=CheckStatus.FAIL if required else CheckStatus.WARN,
+            message=(
+                "liteparse package is not installed; "
+                "install with pip install 'document-translator[extract-liteparse]'"
+            ),
+            required=required,
+        )
+    return PreflightCheck(
+        name="liteparse",
         status=CheckStatus.OK,
-        message="libreoffice is available",
-        required=False,
+        message="liteparse is installed",
+        required=required,
     )
 
 
@@ -200,6 +245,15 @@ def _export_needs_libreoffice(export_format: ExportFormat | None) -> bool:
     return export_format == ExportFormat.DOC
 
 
+def _extract_needs_liteparse_stack(config: PipelineConfig) -> tuple[bool, bool]:
+    """Return (required, include_optional_warn) for LiteParse extraction dependencies."""
+    if config.extract_backend == "liteparse":
+        return True, False
+    if config.extract_backend == "auto":
+        return False, True
+    return False, False
+
+
 def run_preflight_checks(
     config: PipelineConfig,
     *,
@@ -219,7 +273,27 @@ def run_preflight_checks(
         checks.append(_check_weasyprint())
     if config.pdf_ocr or require_ocr:
         checks.append(_check_tesseract(required=require_ocr))
-    if _export_needs_libreoffice(export_format):
-        checks.append(_check_libreoffice())
+    libreoffice_required = _export_needs_libreoffice(export_format)
+    liteparse_required, liteparse_optional = _extract_needs_liteparse_stack(config)
+    liteparse_stack = liteparse_required or liteparse_optional
+
+    if liteparse_stack:
+        checks.append(_check_liteparse(required=liteparse_required))
+        checks.append(_check_imagemagick(required=liteparse_required))
+
+    libreoffice_contexts: list[str] = []
+    if libreoffice_required:
+        libreoffice_contexts.append("legacy .doc export")
+    if liteparse_stack:
+        libreoffice_contexts.append("office input conversion for LiteParse")
+    if libreoffice_contexts:
+        checks.append(
+            _check_libreoffice(
+                required=libreoffice_required or liteparse_required,
+                context="; ".join(libreoffice_contexts),
+            )
+        )
+    elif not liteparse_stack:
+        checks.append(_check_libreoffice(required=False, context="legacy .doc input/export"))
 
     return PreflightResult(checks=checks)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -71,6 +72,26 @@ class PipelineConfig(BaseSettings):
     fail_on_empty_extraction: bool = False
     pdf_ocr: bool = True
     pdf_ocr_languages: str = DEFAULT_PDF_OCR_LANGUAGES
+    extract_backend: Literal["auto", "pymupdf", "liteparse"] = "auto"
+    target_pages: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("TARGET_PAGES", "DOCUMENT_TRANSLATOR_TARGET_PAGES"),
+    )
+    pdf_password: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("PDF_PASSWORD", "DOCUMENT_TRANSLATOR_PDF_PASSWORD"),
+    )
+    extract_dpi: float | None = Field(
+        default=None,
+        validation_alias=AliasChoices("EXTRACT_DPI", "DOCUMENT_TRANSLATOR_EXTRACT_DPI"),
+    )
+    extract_screenshots: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "EXTRACT_SCREENSHOTS",
+            "DOCUMENT_TRANSLATOR_EXTRACT_SCREENSHOTS",
+        ),
+    )
     keep_work_files: bool = False
     job_timeout_seconds: float | None = Field(
         default=None,
@@ -190,6 +211,16 @@ class PipelineConfig(BaseSettings):
         if timeout <= 0:
             raise ValueError("webhook_timeout_seconds must be positive")
         return timeout
+
+    @field_validator("extract_dpi", mode="before")
+    @classmethod
+    def _normalize_extract_dpi(cls, value: object) -> float | None:
+        if value is None or value == "":
+            return None
+        dpi = float(value)
+        if dpi <= 0:
+            raise ValueError("extract_dpi must be positive")
+        return dpi
 
     @field_validator("sentry_report_severities", mode="before")
     @classmethod

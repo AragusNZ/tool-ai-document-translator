@@ -80,6 +80,8 @@ class JobMetadata(BaseModel):
     chunk_count: int = 0
     extraction_alerts: list[ExtractionAlert] = Field(default_factory=list)
     conversion_method: str | None = None
+    extract_backend: str | None = None
+    extract_page_stats: list[dict[str, Any]] = Field(default_factory=list)
     started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     completed_at: datetime | None = None
     duration_seconds: float | None = None

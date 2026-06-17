@@ -19,7 +19,7 @@ from document_translator.extract.rtf import strip_rtf
 
 
 def test_supported_extensions(tmp_path: Path) -> None:
-    for ext in [".pdf", ".txt", ".docx", ".rtf", ".md"]:
+    for ext in [".pdf", ".txt", ".docx", ".rtf", ".md", ".pptx", ".png", ".xlsx"]:
         p = tmp_path / f"file{ext}"
         p.write_text("x", encoding="utf-8")
         assert supported_extension(p)

@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- LiteParse spatial extraction sidecars: `artifacts/01-extraction-layout.json` and optional `artifacts/screenshots/` (retained when `keep_work_files` is set)
+- Extract CLI/config options: `--target-pages`, `--pdf-password`, `--extract-dpi`, `--extract-screenshots` (LiteParse backend; pymupdf emits `EXTRACT_OPTION_IGNORED` warnings)
+- `JobMetadata.extract_backend` and `extract_page_stats` in terminal JSON payloads
+- `artifact_availability` keys `extraction_layout_json` and `screenshots_dir`
+- Input formats via LiteParse (optional `[extract-liteparse]`): `.pptx`, `.ppt`, `.xlsx`, `.xls`, `.png`, `.jpg`, `.jpeg`, `.tiff`, `.webp` — routed in `auto` mode; default export is `pdf`
+- `check` preflight: `liteparse`, `libreoffice`, and `imagemagick` checks when `--extract-backend` is `liteparse` (required) or `auto` (warn)
+- `tools/extract_eval/` benchmark harness with pluggable providers (`python -m tools.extract_eval.benchmark`)
+- [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) — optional LiteParse (Apache-2.0) attribution, PDFium note, and sample-document licensing guidance
+- Docker `WITH_LITEPARSE=1` build arg to bundle `[extract-liteparse]` with third-party notice documentation
+- Pluggable extraction backends (`extract/backends/`): PyMuPDF (default) and optional LiteParse via `[extract-liteparse]` extra
+- `--extract-backend {auto,pymupdf,liteparse}` on `translate` and `check`; `extract_backend` in `PipelineConfig` / `--config` JSON; env `DOCUMENT_TRANSLATOR_EXTRACT_BACKEND`
+- `tools/extract-eval/` benchmark spike for comparing pymupdf vs liteparse extraction
 - `job_id` validation and `runs_dir` containment checks to block path traversal
 - Webhook SSRF guards and optional `webhook_https_only` config
 - Input hardening: reject symlinks and directories; enforce `max_input_bytes` (default 20 MB)

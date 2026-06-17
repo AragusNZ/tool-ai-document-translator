@@ -153,7 +153,7 @@ def test_extract_pdf_returns_normalized_text(minimal_pdf: Path) -> None:
 
 def test_extract_single_file_pdf_respects_no_ocr_config(minimal_pdf: Path) -> None:
     config = PipelineConfig(pdf_ocr=False)
-    with patch("document_translator.extract.common.extract_pdf") as extract_pdf_mock:
+    with patch("document_translator.extract.backends.pymupdf.extract_pdf") as extract_pdf_mock:
         extract_pdf_mock.return_value = ("text\n", 1, "pymupdf", (), 0, False)
         result = extract_single_file(minimal_pdf, config=config)
 
@@ -167,7 +167,7 @@ def test_extract_single_file_pdf_respects_no_ocr_config(minimal_pdf: Path) -> No
 
 def test_extract_single_file_pdf_uses_configured_ocr_languages(minimal_pdf: Path) -> None:
     config = PipelineConfig(pdf_ocr_languages="eng+spa")
-    with patch("document_translator.extract.common.extract_pdf") as extract_pdf_mock:
+    with patch("document_translator.extract.backends.pymupdf.extract_pdf") as extract_pdf_mock:
         extract_pdf_mock.return_value = ("text\n", 1, "pymupdf", (), 0, False)
         extract_single_file(minimal_pdf, config=config)
 

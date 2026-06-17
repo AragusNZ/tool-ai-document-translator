@@ -33,6 +33,7 @@ openai = ["openai>=1.0"]
 anthropic = ["anthropic>=0.40"]
 google = ["google-genai>=1.0"]
 monitoring = ["sentry-sdk>=2.0"]
+extract-liteparse = ["liteparse>=2.0"]
 dev = [
   "pytest>=7",
   "pytest-cov>=4",
@@ -57,7 +58,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 addopts = "-ra --strict-markers"
 markers = [
   "integration: full pipeline or multi-module tests",

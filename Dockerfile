@@ -22,10 +22,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY pyproject.toml README.md LICENSE ./
+COPY pyproject.toml README.md LICENSE THIRD_PARTY_NOTICES.md ./
 COPY src ./src
 
-RUN pip install --upgrade pip && pip install ".[monitoring,openai,anthropic,google]"
+ARG WITH_LITEPARSE=0
+RUN pip install --upgrade pip && \
+    pip install ".[monitoring,openai,anthropic,google]" && \
+    if [ "$WITH_LITEPARSE" = "1" ]; then pip install ".[extract-liteparse]"; fi
 
 RUN useradd --create-home --uid 1000 appuser \
     && mkdir -p /runs /input \

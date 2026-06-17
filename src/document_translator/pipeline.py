@@ -23,6 +23,8 @@ from document_translator.extract.common import (
     build_extracted_markdown,
     compute_extraction_alerts,
     extract_single_file,
+    liteparse_only_options_active,
+    persist_extraction_sidecars,
     strip_front_matter,
     supported_extension,
 )
@@ -442,9 +444,20 @@ class DocumentTranslationService:
         metadata.extraction_alerts = alerts
         metadata.page_count = extraction.pages
         metadata.conversion_method = extraction.conversion_method
+        metadata.extract_backend = extraction.extract_backend
+        metadata.extract_page_stats = list(extraction.extract_page_stats)
 
         for alert in alerts:
             collector.add_from_alert(alert, stage=PipelineStage.EXTRACTING)
+        if extraction.extract_backend == "pymupdf":
+            for option in liteparse_only_options_active(self.config):
+                collector.add(
+                    IssueCode.EXTRACT_OPTION_IGNORED,
+                    IssueSeverity.WARN,
+                    f"Extract option {option!r} is only supported by the liteparse backend",
+                    stage=PipelineStage.EXTRACTING,
+                    scope={"option": option},
+                )
         if extraction.ocr_pages > 0:
             collector.add(
                 IssueCode.OCR_APPLIED,
@@ -476,6 +489,7 @@ class DocumentTranslationService:
             alerts=alerts,
         )
         job_paths.extracted_md.write_text(extracted_md, encoding="utf-8")
+        persist_extraction_sidecars(job_paths, extraction)
         body_text = strip_front_matter(extracted_md)
 
         if self.config.fail_on_empty_extraction and not body_text.strip():

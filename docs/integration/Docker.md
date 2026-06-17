@@ -10,6 +10,16 @@ The published image installs **all LLM provider extras** (`cursor-sdk`, `openai`
 docker build -t document-translator .
 ```
 
+### LiteParse backend (optional)
+
+The default image does **not** include LiteParse. To bundle the optional `[extract-liteparse]` extra (Apache-2.0; see [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md)):
+
+```bash
+docker build --build-arg WITH_LITEPARSE=1 -t document-translator:liteparse .
+```
+
+Use `--extract-backend liteparse` (or `auto` with office/image inputs once Phase 2 formats land) at runtime. Retain third-party license notices when distributing this image variant.
+
 ## Preflight
 
 Verify the container can run jobs before accepting uploads:
