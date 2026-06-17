@@ -1,0 +1,43 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pandoc \
+            tesseract-ocr \
+            tesseract-ocr-eng \
+            libpango-1.0-0 \
+            libpangocairo-1.0-0 \
+            libpangoft2-1.0-0 \
+            libharfbuzz0b \
+            libgdk-pixbuf-2.0-0 \
+            libffi-dev \
+            shared-mime-info \
+            libreoffice-writer
+
+      - name: Install Python package
+        run: pip install -e ".[dev,monitoring]"
+
+      - name: Run tests with coverage
+        run: pytest --cov=document_translator --cov-report=xml --cov-report=term-missing --cov-fail-under=85
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml

@@ -1,0 +1,11 @@
+pymupdf
+striprtf
+weasyprint
+mammoth
+markdownify
+langdetect
+rapidfuzz
+cursor-sdk
+pydantic>=2
+pydantic-settings>=2
+pytest>=7
