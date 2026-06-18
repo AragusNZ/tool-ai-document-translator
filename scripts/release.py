@@ -122,10 +122,12 @@ def finalize_changelog(changelog: str, new_version: str, release_date: str) -> s
 
     preamble, rest = changelog.split(UNRELEASED_HEADING, 1)
     next_heading = re.search(r"\n## \[", rest)
-    if not next_heading:
-        raise ReleaseError("CHANGELOG.md [Unreleased] section is not followed by a release heading")
-    unreleased_body = rest[: next_heading.start()]
-    remainder = rest[next_heading.start() + 1 :]
+    if next_heading:
+        unreleased_body = rest[: next_heading.start()]
+        remainder = rest[next_heading.start() + 1 :]
+    else:
+        unreleased_body = rest
+        remainder = ""
 
     versioned = f"## [{new_version}] - {release_date}{unreleased_body}"
     return preamble + EMPTY_UNRELEASED + versioned + remainder

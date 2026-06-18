@@ -126,6 +126,23 @@ def test_finalize_changelog_rejects_empty_unreleased() -> None:
         release.finalize_changelog(empty, "0.2.0", "2026-06-18")
 
 
+def test_finalize_changelog_supports_first_release_without_prior_heading() -> None:
+    first = """\
+# Changelog
+
+## [Unreleased]
+
+### Added
+
+- Initial public release
+
+"""
+    updated = release.finalize_changelog(first, "0.2.0", "2026-06-18")
+    assert "## [0.2.0] - 2026-06-18" in updated
+    assert "- Initial public release" in updated
+    assert "## [Unreleased]" in updated
+
+
 def test_assert_release_baseline_rejects_mismatch(release_tree: Path) -> None:
     (release_tree / "pyproject.toml").write_text(
         MINIMAL_PYPROJECT.replace("0.1.0", "0.0.0"),
