@@ -245,6 +245,25 @@ def _export_needs_libreoffice(export_format: ExportFormat | None) -> bool:
     return export_format == ExportFormat.DOC
 
 
+def _check_pdf_ocr_server(url: str) -> PreflightCheck:
+    from document_translator.extract.ocr_http import probe_ocr_server
+
+    ok, message = probe_ocr_server(url)
+    if ok:
+        return PreflightCheck(
+            name="pdf_ocr_server",
+            status=CheckStatus.OK,
+            message=message,
+            required=False,
+        )
+    return PreflightCheck(
+        name="pdf_ocr_server",
+        status=CheckStatus.WARN,
+        message=message,
+        required=False,
+    )
+
+
 def _extract_needs_liteparse_stack(config: PipelineConfig) -> tuple[bool, bool]:
     """Return (required, include_optional_warn) for LiteParse extraction dependencies."""
     if config.extract_backend == "liteparse":
@@ -271,8 +290,11 @@ def run_preflight_checks(
         checks.append(_check_pandoc())
     if _export_needs_weasyprint(export_format):
         checks.append(_check_weasyprint())
+    if config.pdf_ocr_server_url:
+        checks.append(_check_pdf_ocr_server(config.pdf_ocr_server_url))
     if config.pdf_ocr or require_ocr:
-        checks.append(_check_tesseract(required=require_ocr))
+        tess_required = require_ocr and not config.pdf_ocr_server_url
+        checks.append(_check_tesseract(required=tess_required))
     libreoffice_required = _export_needs_libreoffice(export_format)
     liteparse_required, liteparse_optional = _extract_needs_liteparse_stack(config)
     liteparse_stack = liteparse_required or liteparse_optional

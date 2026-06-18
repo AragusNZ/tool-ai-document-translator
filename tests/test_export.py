@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from document_translator.export.pdf import convert_markdown_to_pdf, default_css_path
+from document_translator.export.pdf import convert_markdown_to_pdf, default_css_path, resolve_pdf_css_path
 
 
 def _pdf_export_available() -> bool:
@@ -33,6 +33,7 @@ def test_default_css_path_exists() -> None:
     css = default_css_path()
     assert css.name == "translation.css"
     assert css.exists()
+    assert resolve_pdf_css_path(rtl=True).name == "translation-rtl.css"
 
 
 def test_convert_missing_pandoc(tmp_path: Path) -> None:

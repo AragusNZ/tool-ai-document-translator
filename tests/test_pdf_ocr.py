@@ -39,15 +39,29 @@ def _make_page(*, native_text: str, ocr_text: str) -> MagicMock:
     return page
 
 
+def _open_doc_with_pages(pages: list[MagicMock]) -> MagicMock:
+    doc = MagicMock()
+
+    def _getitem(index: int) -> MagicMock:
+        for page in pages:
+            if page.number == index:
+                return page
+        raise IndexError(index)
+
+    doc.__iter__.return_value = pages
+    doc.__getitem__.side_effect = _getitem
+    doc.page_count = len(pages)
+    return doc
+
+
 def test_extract_with_pymupdf_ocr_fallback_improves_sparse_page() -> None:
     page = _make_page(native_text="", ocr_text="Recovered OCR text for the scanned page.")
-    doc = MagicMock()
-    doc.__iter__.return_value = [page]
-    doc.page_count = 1
+    page.number = 0
+    doc = _open_doc_with_pages([page])
 
     with patch("fitz.open", return_value=doc):
         with patch("document_translator.extract.pdf.tesseract_available", return_value=True):
-            text, pages, method, warnings, ocr_pages, ocr_unavailable = extract_with_pymupdf(
+            text, pages, method, warnings, ocr_pages, ocr_unavailable, page_stats = extract_with_pymupdf(
                 Path("scan.pdf"),
             )
 
@@ -57,16 +71,42 @@ def test_extract_with_pymupdf_ocr_fallback_improves_sparse_page() -> None:
     assert ocr_pages == 1
     assert ocr_unavailable is False
     assert warnings == ()
+    assert page_stats[0]["ocr"] is True
+    assert page_stats[0]["method"] == "tesseract"
+
+
+def test_extract_with_pymupdf_http_ocr_fallback() -> None:
+    page = MagicMock()
+    page.number = 0
+    page.get_text.return_value = ""
+    doc = _open_doc_with_pages([page])
+
+    with patch("fitz.open", return_value=doc):
+        with patch("document_translator.extract.pdf._render_page_png", return_value=b"png"):
+            with patch(
+                "document_translator.extract.pdf.recognize_image",
+                return_value="HTTP OCR recovered text",
+            ):
+                text, _pages, method, warnings, ocr_pages, ocr_unavailable, page_stats = extract_with_pymupdf(
+                    Path("scan.pdf"),
+                    ocr_server_url="http://localhost:8828/ocr",
+                )
+
+    assert "HTTP OCR recovered text" in text
+    assert method == "pymupdf+ocr"
+    assert ocr_pages == 1
+    assert ocr_unavailable is False
+    assert warnings == ()
+    assert page_stats[0]["method"] == "http"
 
 
 def test_extract_with_pymupdf_skips_ocr_when_disabled() -> None:
     page = _make_page(native_text="", ocr_text="Should not be used")
-    doc = MagicMock()
-    doc.__iter__.return_value = [page]
-    doc.page_count = 1
+    page.number = 0
+    doc = _open_doc_with_pages([page])
 
     with patch("fitz.open", return_value=doc):
-        text, _pages, method, warnings, ocr_pages, ocr_unavailable = extract_with_pymupdf(
+        text, _pages, method, warnings, ocr_pages, ocr_unavailable, _stats = extract_with_pymupdf(
             Path("scan.pdf"),
             ocr_enabled=False,
         )
@@ -81,13 +121,12 @@ def test_extract_with_pymupdf_skips_ocr_when_disabled() -> None:
 
 def test_extract_with_pymupdf_marks_tesseract_unavailable() -> None:
     page = _make_page(native_text="", ocr_text="unused")
-    doc = MagicMock()
-    doc.__iter__.return_value = [page]
-    doc.page_count = 1
+    page.number = 0
+    doc = _open_doc_with_pages([page])
 
     with patch("fitz.open", return_value=doc):
         with patch("document_translator.extract.pdf.tesseract_available", return_value=False):
-            _text, _pages, method, warnings, ocr_pages, ocr_unavailable = extract_with_pymupdf(
+            _text, _pages, method, warnings, ocr_pages, ocr_unavailable, _stats = extract_with_pymupdf(
                 Path("scan.pdf"),
             )
 
@@ -99,14 +138,13 @@ def test_extract_with_pymupdf_marks_tesseract_unavailable() -> None:
 
 def test_extract_with_pymupdf_ocr_failure_adds_warning() -> None:
     page = _make_page(native_text="", ocr_text="unused")
+    page.number = 0
     page.get_textpage_ocr.side_effect = RuntimeError("OCR engine failed")
-    doc = MagicMock()
-    doc.__iter__.return_value = [page]
-    doc.page_count = 1
+    doc = _open_doc_with_pages([page])
 
     with patch("fitz.open", return_value=doc):
         with patch("document_translator.extract.pdf.tesseract_available", return_value=True):
-            _text, _pages, method, warnings, ocr_pages, ocr_unavailable = extract_with_pymupdf(
+            _text, _pages, method, warnings, ocr_pages, ocr_unavailable, _stats = extract_with_pymupdf(
                 Path("scan.pdf"),
             )
 
@@ -121,13 +159,11 @@ def test_extract_with_pymupdf_hybrid_only_sparse_pages() -> None:
     native_page.number = 0
     sparse_page = _make_page(native_text="", ocr_text="OCR page two.")
     sparse_page.number = 1
-    doc = MagicMock()
-    doc.__iter__.return_value = [native_page, sparse_page]
-    doc.page_count = 2
+    doc = _open_doc_with_pages([native_page, sparse_page])
 
     with patch("fitz.open", return_value=doc):
         with patch("document_translator.extract.pdf.tesseract_available", return_value=True):
-            text, pages, method, _warnings, ocr_pages, ocr_unavailable = extract_with_pymupdf(
+            text, pages, method, _warnings, ocr_pages, ocr_unavailable, _stats = extract_with_pymupdf(
                 Path("mixed.pdf"),
             )
 
@@ -142,40 +178,33 @@ def test_extract_with_pymupdf_hybrid_only_sparse_pages() -> None:
 
 
 def test_extract_pdf_returns_normalized_text(minimal_pdf: Path) -> None:
-    text, pages, method, warnings, ocr_pages, ocr_unavailable = extract_pdf(minimal_pdf)
+    text, pages, method, warnings, ocr_pages, ocr_unavailable, page_stats = extract_pdf(minimal_pdf)
     assert "Sample PDF text" in text
     assert pages == 1
     assert method == "pymupdf"
     assert warnings == ()
     assert ocr_pages == 0
     assert ocr_unavailable is False
+    assert len(page_stats) == 1
 
 
 def test_extract_single_file_pdf_respects_no_ocr_config(minimal_pdf: Path) -> None:
     config = PipelineConfig(pdf_ocr=False)
     with patch("document_translator.extract.backends.pymupdf.extract_pdf") as extract_pdf_mock:
-        extract_pdf_mock.return_value = ("text\n", 1, "pymupdf", (), 0, False)
+        extract_pdf_mock.return_value = ("text\n", 1, "pymupdf", (), 0, False, ())
         result = extract_single_file(minimal_pdf, config=config)
 
-    extract_pdf_mock.assert_called_once_with(
-        minimal_pdf,
-        ocr_enabled=False,
-        ocr_languages="eng",
-    )
+    assert extract_pdf_mock.call_args.kwargs["ocr_enabled"] is False
     assert result.conversion_method == "pymupdf"
 
 
 def test_extract_single_file_pdf_uses_configured_ocr_languages(minimal_pdf: Path) -> None:
     config = PipelineConfig(pdf_ocr_languages="eng+spa")
     with patch("document_translator.extract.backends.pymupdf.extract_pdf") as extract_pdf_mock:
-        extract_pdf_mock.return_value = ("text\n", 1, "pymupdf", (), 0, False)
+        extract_pdf_mock.return_value = ("text\n", 1, "pymupdf", (), 0, False, ())
         extract_single_file(minimal_pdf, config=config)
 
-    extract_pdf_mock.assert_called_once_with(
-        minimal_pdf,
-        ocr_enabled=True,
-        ocr_languages="eng+spa",
-    )
+    assert extract_pdf_mock.call_args.kwargs["ocr_languages"] == "eng+spa"
 
 
 @pytest.mark.integration

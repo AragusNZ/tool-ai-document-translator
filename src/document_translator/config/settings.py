@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -72,6 +72,27 @@ class PipelineConfig(BaseSettings):
     fail_on_empty_extraction: bool = False
     pdf_ocr: bool = True
     pdf_ocr_languages: str = DEFAULT_PDF_OCR_LANGUAGES
+    pdf_ocr_server_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "PDF_OCR_SERVER_URL",
+            "DOCUMENT_TRANSLATOR_PDF_OCR_SERVER_URL",
+        ),
+    )
+    pdf_ocr_workers: int | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "PDF_OCR_WORKERS",
+            "DOCUMENT_TRANSLATOR_PDF_OCR_WORKERS",
+        ),
+    )
+    extract_debug: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "EXTRACT_DEBUG",
+            "DOCUMENT_TRANSLATOR_EXTRACT_DEBUG",
+        ),
+    )
     extract_backend: Literal["auto", "pymupdf", "liteparse"] = "auto"
     target_pages: str | None = Field(
         default=None,
@@ -92,7 +113,16 @@ class PipelineConfig(BaseSettings):
             "DOCUMENT_TRANSLATOR_EXTRACT_SCREENSHOTS",
         ),
     )
+    preserve_layout: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "PRESERVE_LAYOUT",
+            "DOCUMENT_TRANSLATOR_PRESERVE_LAYOUT",
+        ),
+    )
     keep_work_files: bool = False
+    glossary_path: Path | None = None
+    glossary: dict[str, Any] | None = None
     job_timeout_seconds: float | None = Field(
         default=None,
         validation_alias=AliasChoices("JOB_TIMEOUT", "DOCUMENT_TRANSLATOR_JOB_TIMEOUT"),
@@ -211,6 +241,33 @@ class PipelineConfig(BaseSettings):
         if timeout <= 0:
             raise ValueError("webhook_timeout_seconds must be positive")
         return timeout
+
+    @field_validator("pdf_ocr_server_url", mode="before")
+    @classmethod
+    def _normalize_pdf_ocr_server_url(cls, value: object) -> str | None:
+        if value is None or value == "":
+            return None
+        url = str(value).strip()
+        if not url.startswith(("http://", "https://")):
+            raise ValueError("pdf_ocr_server_url must start with http:// or https://")
+        return url
+
+    @field_validator("pdf_ocr_workers", mode="before")
+    @classmethod
+    def _normalize_pdf_ocr_workers(cls, value: object) -> int | None:
+        if value is None or value == "":
+            return None
+        workers = int(value)
+        if workers <= 0:
+            raise ValueError("pdf_ocr_workers must be positive")
+        return workers
+
+    @field_validator("glossary_path", mode="before")
+    @classmethod
+    def _normalize_glossary_path(cls, value: object) -> Path | None:
+        if value is None or value == "":
+            return None
+        return Path(str(value))
 
     @field_validator("extract_dpi", mode="before")
     @classmethod

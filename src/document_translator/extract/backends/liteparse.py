@@ -92,6 +92,8 @@ def _liteparse_kwargs(config: PipelineConfig) -> dict[str, Any]:
         "ocr_enabled": config.pdf_ocr,
         "ocr_language": config.pdf_ocr_languages,
     }
+    if config.pdf_ocr_server_url:
+        kwargs["ocr_server_url"] = config.pdf_ocr_server_url
     if config.target_pages:
         kwargs["target_pages"] = config.target_pages
     if config.pdf_password:
@@ -133,6 +135,23 @@ class LiteParseBackend:
         file_bytes = path.stat().st_size
         pages = list(result.pages)
         ocr_pages = _count_ocr_pages(pages) if config.pdf_ocr else 0
+        if config.extract_debug:
+            from document_translator.extract.debug import log_extract_page
+
+            for page in pages:
+                page_text = str(getattr(page, "text", "") or "")
+                log_extract_page(
+                    backend=self.name,
+                    page_num=_page_number(page) or 0,
+                    native_chars=len(page_text.strip()),
+                    final_chars=len(page_text.strip()),
+                    ocr_applied=any(
+                        getattr(item, "confidence", None) is not None
+                        for item in _page_text_items(page)
+                    ),
+                    ocr_method="liteparse",
+                    source_file=path.name,
+                )
         screenshot_paths: tuple[Path, ...] = ()
         screenshot_temp_dir: Path | None = None
         if config.extract_screenshots:

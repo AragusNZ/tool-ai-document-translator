@@ -10,6 +10,14 @@ def default_css_path() -> Path:
     return Path(__file__).resolve().parent / "translation.css"
 
 
+def rtl_css_path() -> Path:
+    return Path(__file__).resolve().parent / "translation-rtl.css"
+
+
+def resolve_pdf_css_path(*, rtl: bool = False) -> Path:
+    return rtl_css_path() if rtl else default_css_path()
+
+
 def _ensure_weasyprint() -> None:
     try:
         import weasyprint  # noqa: F401
@@ -25,13 +33,14 @@ def convert_markdown_to_pdf(
     target: Path,
     *,
     css_path: Path | None = None,
+    rtl: bool = False,
     timeout_seconds: float | None = None,
 ) -> None:
     if shutil.which("pandoc") is None:
         raise RuntimeError("pandoc not found on PATH. Install with: sudo apt install pandoc")
 
     _ensure_weasyprint()
-    css = css_path or default_css_path()
+    css = css_path or resolve_pdf_css_path(rtl=rtl)
     target.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
         "pandoc",

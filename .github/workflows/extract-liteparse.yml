@@ -1,0 +1,33 @@
+name: Extract LiteParse golden
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: extract-liteparse-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  golden-liteparse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libreoffice-writer \
+            imagemagick
+
+      - name: Install package with LiteParse extra
+        run: pip install -e ".[dev,extract-liteparse]"
+
+      - name: Run LiteParse golden extraction regression
+        run: pytest tests/test_extract_regression.py -m requires_liteparse -v

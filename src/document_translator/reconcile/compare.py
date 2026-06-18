@@ -25,14 +25,18 @@ def split_sentences(text: str) -> list[str]:
 PROPER_NOUN_RE = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b")
 
 
-def extract_protected_tokens(text: str) -> set[str]:
+def extract_protected_tokens(text: str, *, extra_tokens: set[str] | None = None) -> set[str]:
     tokens = {m.group(0).strip() for m in PROTECTED_TOKEN_RE.finditer(text)}
     tokens.update(m.group(0).strip() for m in PROPER_NOUN_RE.finditer(text))
+    if extra_tokens:
+        tokens.update(token.strip() for token in extra_tokens if token.strip())
     return tokens
 
 
-def protected_tokens_differ(a: str, b: str) -> bool:
-    return extract_protected_tokens(a) != extract_protected_tokens(b)
+def protected_tokens_differ(a: str, b: str, *, extra_tokens: set[str] | None = None) -> bool:
+    return extract_protected_tokens(a, extra_tokens=extra_tokens) != extract_protected_tokens(
+        b, extra_tokens=extra_tokens
+    )
 
 
 def compare_chunk_pair(
@@ -40,6 +44,7 @@ def compare_chunk_pair(
     text_2: str,
     *,
     similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
+    glossary_tokens: set[str] | None = None,
 ) -> list[dict[str, object]]:
     sentences_1 = split_sentences(text_1)
     sentences_2 = split_sentences(text_2)
@@ -52,7 +57,9 @@ def compare_chunk_pair(
         if not s1 and not s2:
             continue
         score = fuzz.ratio(s1, s2) if s1 and s2 else 0.0
-        token_diff = protected_tokens_differ(s1, s2) if s1 and s2 else bool(s1) != bool(s2)
+        token_diff = (
+            protected_tokens_differ(s1, s2, extra_tokens=glossary_tokens) if s1 and s2 else bool(s1) != bool(s2)
+        )
         if score < similarity_threshold or token_diff:
             flagged.append(
                 {

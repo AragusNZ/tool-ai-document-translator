@@ -70,6 +70,10 @@ class JobMetadata(BaseModel):
     target_lang: str = DEFAULT_TARGET_LANG
     translation_mode: str = TranslationMode.QUICK.value
     translation_context: str | None = None
+    glossary_path: str | None = None
+    glossary_term_count: int = 0
+    resumed_from_checkpoint: bool = False
+    checkpoint_stage: str | None = None
     is_legal_document: bool = False
     skipped_translation: bool = False
     no_translate: bool = False
@@ -82,6 +86,8 @@ class JobMetadata(BaseModel):
     conversion_method: str | None = None
     extract_backend: str | None = None
     extract_page_stats: list[dict[str, Any]] = Field(default_factory=list)
+    preserve_layout: bool = False
+    used_layout_text: bool = False
     started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     completed_at: datetime | None = None
     duration_seconds: float | None = None
@@ -170,6 +176,7 @@ class TranslationOptions(BaseModel):
     no_translate: bool = False
     save_resolved: bool = False
     no_cover_page: bool = False
+    resume: bool = False
 
     @field_validator("translation_context", mode="before")
     @classmethod

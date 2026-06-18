@@ -14,9 +14,15 @@ from document_translator.config.defaults import (
 )
 from document_translator.config.formats import SUPPORTED_EXTENSIONS
 from document_translator.config.settings import PipelineConfig
+from document_translator.extract.backends.routing import (
+    get_backend,
+    resolve_backend_name,
+    uses_backend_routing,
+)
 from document_translator.extract.docx import extract_docx
+from document_translator.extract.epub import extract_epub
+from document_translator.extract.html import extract_html
 from document_translator.extract.legacy_doc import extract_legacy_doc, extract_odt
-from document_translator.extract.backends.routing import get_backend, resolve_backend_name, uses_backend_routing
 from document_translator.extract.rtf import strip_rtf
 from document_translator.models import ExtractionAlert
 from document_translator.storage.paths import JobPaths
@@ -50,7 +56,15 @@ def liteparse_only_options_active(config: PipelineConfig) -> list[str]:
         options.append("extract_dpi")
     if config.extract_screenshots:
         options.append("extract_screenshots")
+    if config.preserve_layout:
+        options.append("preserve_layout")
     return options
+
+
+def translation_body_text(result: ExtractionResult, *, preserve_layout: bool) -> str:
+    if preserve_layout and result.layout_text:
+        return result.layout_text
+    return result.text
 
 
 def persist_extraction_sidecars(job_paths: JobPaths, extraction: ExtractionResult) -> None:
@@ -130,6 +144,25 @@ def extract_single_file(path: Path, *, config: PipelineConfig | None = None) -> 
         timeout = None if config is None else config.subprocess_timeout_seconds
         text, method = extract_odt(path, timeout_seconds=timeout)
         return ExtractionResult(text=normalize_text(text), pages=None, bytes=file_bytes, conversion_method=method)
+    if suffix == ".epub":
+        text, warnings = extract_epub(path)
+        return ExtractionResult(
+            text=normalize_text(text),
+            pages=None,
+            bytes=file_bytes,
+            conversion_method="ebooklib",
+            conversion_warnings=tuple(warnings),
+        )
+    if suffix in {".html", ".htm"}:
+        timeout = None if config is None else config.subprocess_timeout_seconds
+        text, warnings, method = extract_html(path, timeout_seconds=timeout)
+        return ExtractionResult(
+            text=normalize_text(text),
+            pages=None,
+            bytes=file_bytes,
+            conversion_method=method,
+            conversion_warnings=tuple(warnings),
+        )
 
     raise RuntimeError(f"Unsupported file type: {path.suffix}")
 

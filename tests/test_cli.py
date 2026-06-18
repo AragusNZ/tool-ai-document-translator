@@ -1542,3 +1542,61 @@ def test_cli_batch_exit_2_when_one_job_fails(
     assert payload["status"] == "failed"
     assert payload["failed_count"] == 1
     assert payload["jobs"][1]["error_message"] == "extract failed"
+
+
+def test_cli_resume_requires_checkpoint(tmp_path: Path) -> None:
+    doc = tmp_path / "doc.txt"
+    doc.write_text("hello", encoding="utf-8")
+    runs = tmp_path / "runs"
+    job_root = runs / "resume-missing"
+    job_root.mkdir(parents=True)
+    code = main(
+        [
+            "translate",
+            str(doc),
+            "--job-id",
+            "resume-missing",
+            "--output-dir",
+            str(runs),
+            "--resume",
+        ]
+    )
+    assert code == 1
+
+
+def test_cli_glossary_flag(tmp_path: Path) -> None:
+    doc = tmp_path / "doc.txt"
+    doc.write_text("hello", encoding="utf-8")
+    glossary = tmp_path / "glossary.json"
+    glossary.write_text(json.dumps({"Acme": "Acme"}), encoding="utf-8")
+    captured: dict[str, PipelineConfig] = {}
+
+    class FakeService:
+        def __init__(self, config: PipelineConfig) -> None:
+            captured["config"] = config
+
+        def translate(self, input_path: Path, options):  # noqa: ANN001
+            metadata = JobMetadata(job_id="glossary-job", source_file="doc.txt")
+            return JobResult(
+                job_id="glossary-job",
+                status=JobStatus.COMPLETED,
+                artifacts=ArtifactPaths(),
+                metadata=metadata,
+            )
+
+    with patch("document_translator.cli.DocumentTranslationService", FakeService):
+        code = main(
+            [
+                "translate",
+                str(doc),
+                "--job-id",
+                "glossary-job",
+                "--output-dir",
+                str(tmp_path / "runs"),
+                "--glossary",
+                str(glossary),
+            ]
+        )
+
+    assert code == 0
+    assert captured["config"].glossary_path == glossary

@@ -4,25 +4,25 @@ overview: "A six-phase delivery plan for [ROADMAP.md](ROADMAP.md): establish plu
 todos:
   - id: phase-1-backend
     content: "Phase 1: extract/backends protocol, pymupdf refactor, PipelineConfig + CLI --extract-backend, liteparse optional extra + text adapter, tests"
-    status: pending
+    status: completed
   - id: phase-2-formats
     content: "Phase 2: PPTX/XLSX/image format registry, liteparse routing, check command extensions, extract-eval MVP"
-    status: pending
+    status: completed
   - id: phase-3-spatial
     content: "Phase 3: layout sidecar, screenshots, target-pages/password/dpi flags, JobMetadata extract stats, --no-translate parity"
-    status: pending
+    status: completed
   - id: phase-4-ocr-obs
     content: "Phase 4: HTTP OCR client (pymupdf path), concurrent page OCR, extract debug mode, Sentry breadcrumbs"
-    status: pending
+    status: completed
   - id: phase-5-quality
     content: "Phase 5: golden extraction regression CI, eval harness HTML reports, default-routing decision doc"
-    status: pending
+    status: completed
   - id: phase-6-translation
     content: "Phase 6: glossary/terminology in translate + reconcile; checkpoint resume with per-chunk artifacts"
-    status: pending
+    status: completed
   - id: phase-7-export
     content: "Phase 7: EPUB/HTML extractors; RTL export; incremental layout/table preservation via layout_text"
-    status: pending
+    status: completed
 isProject: false
 ---
 

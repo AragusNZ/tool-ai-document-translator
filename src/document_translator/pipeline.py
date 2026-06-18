@@ -20,6 +20,7 @@ from document_translator.errors import (
 from document_translator.export.combine import build_export_markdown
 from document_translator.export.converter import export_markdown
 from document_translator.extract.common import (
+    ExtractionResult,
     build_extracted_markdown,
     compute_extraction_alerts,
     extract_single_file,
@@ -27,6 +28,7 @@ from document_translator.extract.common import (
     persist_extraction_sidecars,
     strip_front_matter,
     supported_extension,
+    translation_body_text,
 )
 from document_translator.lib.job_control import (
     JobDeadline,
@@ -48,6 +50,7 @@ from document_translator.models import (
     aggregate_job_status,
 )
 from document_translator.observability import (
+    add_extract_breadcrumb,
     build_issue_listeners,
     finish_sentry_transaction,
     get_logger,
@@ -61,7 +64,20 @@ from document_translator.report.cover import (
     generate_cover_markdown,
     translate_cover_markdown,
 )
+from document_translator.storage.checkpoint import (
+    CheckpointStage,
+    CheckpointState,
+    load_checkpoint,
+    load_completed_chunks,
+    read_layout_body_checkpoint,
+    source_text_hash,
+    write_checkpoint,
+    write_chunk_checkpoint,
+    write_extract_chunk_checkpoints,
+    write_layout_body_checkpoint,
+)
 from document_translator.storage.paths import JobPaths
+from document_translator.translate.glossary import Glossary, resolve_glossary
 from document_translator.translate.service import (
     build_document_summary,
     translate_source_chunks,
@@ -115,6 +131,7 @@ class DocumentTranslationService:
         current_progress: float,
         error_message: str | None = None,
         error_code: IssueCode | None = None,
+        keep_checkpoints: bool = False,
     ) -> JobResult:
         metadata.issues = collector.to_list()
         metadata.job_status = status
@@ -148,6 +165,7 @@ class DocumentTranslationService:
         job_paths.cleanup_working_files(
             keep_work_files=self.config.keep_work_files,
             keep_resolved=metadata.save_resolved,
+            keep_checkpoints=keep_checkpoints,
         )
         metadata.artifact_availability = job_paths.artifact_availability()
 
@@ -304,6 +322,14 @@ class DocumentTranslationService:
             save_resolved=opts.save_resolved,
             no_cover_page=opts.no_cover_page,
         )
+        glossary = resolve_glossary(
+            glossary_path=self.config.glossary_path,
+            inline_glossary=self.config.glossary,
+        )
+        if glossary is not None:
+            metadata.glossary_term_count = len(glossary)
+        if self.config.glossary_path is not None:
+            metadata.glossary_path = str(self.config.glossary_path)
 
         with sentry_translate_transaction(opts.job_id) as sentry_transaction:
             try:
@@ -317,6 +343,7 @@ class DocumentTranslationService:
                     metadata=metadata,
                     discrepancies=discrepancies,
                     pipeline_state=pipeline_state,
+                    glossary=glossary,
                 )
             except Exception as exc:
                 metadata.completed_at = datetime.now(UTC)
@@ -375,6 +402,7 @@ class DocumentTranslationService:
                     current_progress=current_progress,
                     error_message=error_message,
                     error_code=error_code,
+                    keep_checkpoints=True,
                 )
 
             finish_sentry_transaction(sentry_transaction, status=result.status)
@@ -401,104 +429,215 @@ class DocumentTranslationService:
         metadata: JobMetadata,
         discrepancies: list[Discrepancy],
         pipeline_state: dict[str, object],
+        glossary: Glossary | None = None,
     ) -> JobResult:
         current_stage = PipelineStage.EXTRACTING
         current_progress = 0.0
+        resume_state = load_checkpoint(job_paths.checkpoint_json) if opts.resume else None
+        if opts.resume:
+            metadata.resumed_from_checkpoint = True
 
         def status_kwargs() -> dict[str, float | None]:
             return self._status_timing(self.config, deadline)
+
+        def persist_checkpoint(
+            *,
+            stage: CheckpointStage,
+            chunk_index: int = -1,
+            pass_num: int = 1,
+            source_hash: str,
+            chunk_count: int = 0,
+        ) -> None:
+            state = CheckpointState(
+                stage=stage,
+                chunk_index=chunk_index,
+                pass_num=pass_num,
+                source_hash=source_hash,
+                llm=self.config.llm,
+                translation_mode=opts.translation_mode.value,
+                chunk_count=chunk_count,
+                target_lang=opts.target_lang,
+            )
+            write_checkpoint(job_paths.checkpoint_json, state)
+            metadata.checkpoint_stage = stage.value
+
+        def validate_resume_state(source_hash: str) -> None:
+            if resume_state is None:
+                raise PipelineError(
+                    "No checkpoint found for resume",
+                    code=IssueCode.CHECKPOINT_MISMATCH,
+                    stage=PipelineStage.EXTRACTING,
+                )
+            if (
+                resume_state.llm != self.config.llm
+                or resume_state.translation_mode != opts.translation_mode.value
+                or resume_state.target_lang != opts.target_lang
+            ):
+                raise PipelineError(
+                    "Checkpoint does not match current LLM, translation mode, or target language",
+                    code=IssueCode.CHECKPOINT_MISMATCH,
+                    stage=PipelineStage.TRANSLATING,
+                )
+            if resume_state.source_hash != source_hash:
+                raise PipelineError(
+                    "Source content changed since checkpoint; cannot resume",
+                    code=IssueCode.CHECKPOINT_MISMATCH,
+                    stage=PipelineStage.EXTRACTING,
+                )
+
+        skip_extract = bool(
+            opts.resume and resume_state is not None and job_paths.extracted_md.is_file()
+        )
+        extraction_result: ExtractionResult | None = None
 
         deadline.check(current_stage)
         if not supported_extension(input_path):
             raise UnsupportedFormatError(input_path.suffix)
 
-        current_progress = 0.05
-        pipeline_state["current_stage"] = PipelineStage.EXTRACTING
-        pipeline_state["current_progress"] = current_progress
-        self._log_stage(opts.job_id, PipelineStage.EXTRACTING, current_progress, "Extracting document")
-        job_paths.write_status(
-            PipelineStage.EXTRACTING,
-            message="Extracting document",
-            progress=current_progress,
-            issue_count=0,
-            **status_kwargs(),
-        )
+        if skip_extract:
+            metadata.resumed_from_checkpoint = True
+            extracted_md = job_paths.extracted_md.read_text(encoding="utf-8")
+            layout_body = read_layout_body_checkpoint(job_paths.checkpoints_extract_dir)
+            if layout_body is not None:
+                body_text = layout_body
+                metadata.used_layout_text = True
+            else:
+                body_text = strip_front_matter(extracted_md)
+            current_progress = 0.15
+            pipeline_state["current_stage"] = PipelineStage.DETECTING_LANGUAGE
+            pipeline_state["current_progress"] = current_progress
+        else:
+            current_progress = 0.05
+            pipeline_state["current_stage"] = PipelineStage.EXTRACTING
+            pipeline_state["current_progress"] = current_progress
+            self._log_stage(opts.job_id, PipelineStage.EXTRACTING, current_progress, "Extracting document")
+            job_paths.write_status(
+                PipelineStage.EXTRACTING,
+                message="Extracting document",
+                progress=current_progress,
+                issue_count=0,
+                **status_kwargs(),
+            )
 
-        try:
-            validate_input_file(input_path, max_bytes=self.config.max_input_bytes)
-        except ValueError as exc:
-            raise PipelineError(
-                str(exc),
-                code=IssueCode.CONFIGURATION_ERROR,
-                stage=PipelineStage.EXTRACTING,
-            ) from exc
-
-        dest_input = job_paths.input_dir / input_path.name
-        if input_path.resolve() != dest_input.resolve():
-            shutil.copy2(input_path, dest_input, follow_symlinks=False)
-
-        deadline.check(current_stage)
-        extraction = extract_single_file(dest_input, config=self.config)
-        deadline.check(current_stage)
-        alerts = compute_extraction_alerts(extraction, input_path.name)
-        metadata.extraction_alerts = alerts
-        metadata.page_count = extraction.pages
-        metadata.conversion_method = extraction.conversion_method
-        metadata.extract_backend = extraction.extract_backend
-        metadata.extract_page_stats = list(extraction.extract_page_stats)
-
-        for alert in alerts:
-            collector.add_from_alert(alert, stage=PipelineStage.EXTRACTING)
-        if extraction.extract_backend == "pymupdf":
-            for option in liteparse_only_options_active(self.config):
-                collector.add(
-                    IssueCode.EXTRACT_OPTION_IGNORED,
-                    IssueSeverity.WARN,
-                    f"Extract option {option!r} is only supported by the liteparse backend",
+            try:
+                validate_input_file(input_path, max_bytes=self.config.max_input_bytes)
+            except ValueError as exc:
+                raise PipelineError(
+                    str(exc),
+                    code=IssueCode.CONFIGURATION_ERROR,
                     stage=PipelineStage.EXTRACTING,
-                    scope={"option": option},
+                ) from exc
+
+            dest_input = job_paths.input_dir / input_path.name
+            if input_path.resolve() != dest_input.resolve():
+                shutil.copy2(input_path, dest_input, follow_symlinks=False)
+
+            deadline.check(current_stage)
+            extraction = extract_single_file(dest_input, config=self.config)
+            deadline.check(current_stage)
+            alerts = compute_extraction_alerts(extraction, input_path.name)
+            metadata.extraction_alerts = alerts
+            metadata.page_count = extraction.pages
+            metadata.conversion_method = extraction.conversion_method
+            metadata.extract_backend = extraction.extract_backend
+            metadata.extract_page_stats = list(extraction.extract_page_stats)
+            add_extract_breadcrumb(
+                backend=extraction.extract_backend,
+                pages=extraction.pages,
+                ocr_pages=extraction.ocr_pages,
+                source_file=input_path.name,
+            )
+
+            for alert in alerts:
+                collector.add_from_alert(alert, stage=PipelineStage.EXTRACTING)
+            if extraction.extract_backend == "pymupdf":
+                for option in liteparse_only_options_active(self.config):
+                    collector.add(
+                        IssueCode.EXTRACT_OPTION_IGNORED,
+                        IssueSeverity.WARN,
+                        f"Extract option {option!r} is only supported by the liteparse backend",
+                        stage=PipelineStage.EXTRACTING,
+                        scope={"option": option},
+                    )
+            if extraction.ocr_pages > 0:
+                collector.add(
+                    IssueCode.OCR_APPLIED,
+                    IssueSeverity.INFO,
+                    f"OCR applied to {extraction.ocr_pages} page(s)",
+                    stage=PipelineStage.EXTRACTING,
+                    scope={"file": input_path.name, "ocr_pages": str(extraction.ocr_pages)},
                 )
-        if extraction.ocr_pages > 0:
-            collector.add(
-                IssueCode.OCR_APPLIED,
-                IssueSeverity.INFO,
-                f"OCR applied to {extraction.ocr_pages} page(s)",
-                stage=PipelineStage.EXTRACTING,
-                scope={"file": input_path.name, "ocr_pages": str(extraction.ocr_pages)},
-            )
-        if extraction.ocr_unavailable:
-            collector.add(
-                IssueCode.OCR_UNAVAILABLE,
-                IssueSeverity.WARN,
-                "Sparse PDF pages detected but Tesseract is not installed",
-                stage=PipelineStage.EXTRACTING,
-                scope={"file": input_path.name},
-            )
-        for warning in extraction.conversion_warnings:
-            collector.add(
-                IssueCode.CONVERSION_DEGRADED,
-                IssueSeverity.WARN,
-                warning,
-                stage=PipelineStage.EXTRACTING,
-                scope={"file": input_path.name},
-            )
+            if extraction.ocr_unavailable:
+                if self.config.pdf_ocr_server_url:
+                    ocr_message = (
+                        "Sparse PDF pages detected but neither HTTP OCR server nor Tesseract is available"
+                    )
+                else:
+                    ocr_message = "Sparse PDF pages detected but Tesseract is not installed"
+                collector.add(
+                    IssueCode.OCR_UNAVAILABLE,
+                    IssueSeverity.WARN,
+                    ocr_message,
+                    stage=PipelineStage.EXTRACTING,
+                    scope={"file": input_path.name},
+                )
+            for warning in extraction.conversion_warnings:
+                collector.add(
+                    IssueCode.CONVERSION_DEGRADED,
+                    IssueSeverity.WARN,
+                    warning,
+                    stage=PipelineStage.EXTRACTING,
+                    scope={"file": input_path.name},
+                )
 
-        extracted_md = build_extracted_markdown(
-            extraction,
-            source_file=input_path.name,
-            alerts=alerts,
-        )
-        job_paths.extracted_md.write_text(extracted_md, encoding="utf-8")
-        persist_extraction_sidecars(job_paths, extraction)
-        body_text = strip_front_matter(extracted_md)
-
-        if self.config.fail_on_empty_extraction and not body_text.strip():
-            raise PipelineError(
-                f"{input_path.name}: extraction produced no text",
-                code=IssueCode.EMPTY_EXTRACTION,
-                stage=PipelineStage.EXTRACTING,
-                scope={"file": input_path.name},
+            extracted_md = build_extracted_markdown(
+                extraction,
+                source_file=input_path.name,
+                alerts=alerts,
             )
+            job_paths.extracted_md.write_text(extracted_md, encoding="utf-8")
+            persist_extraction_sidecars(job_paths, extraction)
+            extraction_result = extraction
+            body_text = strip_front_matter(extracted_md)
+
+            if self.config.fail_on_empty_extraction and not body_text.strip():
+                raise PipelineError(
+                    f"{input_path.name}: extraction produced no text",
+                    code=IssueCode.EMPTY_EXTRACTION,
+                    stage=PipelineStage.EXTRACTING,
+                    scope={"file": input_path.name},
+                )
+
+        if self.config.preserve_layout:
+            metadata.preserve_layout = True
+        if self.config.preserve_layout and skip_extract and not metadata.used_layout_text:
+            collector.add(
+                IssueCode.PRESERVE_LAYOUT_UNAVAILABLE,
+                IssueSeverity.WARN,
+                "preserve_layout requested but layout text is unavailable when resuming from checkpoint",
+                stage=PipelineStage.EXTRACTING,
+            )
+        elif self.config.preserve_layout and extraction_result is not None:
+            layout_body = translation_body_text(extraction_result, preserve_layout=True)
+            if extraction_result.layout_text:
+                body_text = layout_body
+                metadata.used_layout_text = True
+            else:
+                collector.add(
+                    IssueCode.PRESERVE_LAYOUT_UNAVAILABLE,
+                    IssueSeverity.WARN,
+                    "preserve_layout requested but extractor did not provide layout_text",
+                    stage=PipelineStage.EXTRACTING,
+                )
+
+        if metadata.used_layout_text:
+            write_layout_body_checkpoint(job_paths.checkpoints_extract_dir, body_text)
+
+        body_hash = source_text_hash(body_text)
+        if opts.resume:
+            validate_resume_state(body_hash)
+        elif not skip_extract:
+            persist_checkpoint(stage=CheckpointStage.EXTRACTED, source_hash=body_hash)
 
         current_stage = PipelineStage.DETECTING_LANGUAGE
         current_progress = 0.15
@@ -583,6 +722,14 @@ class DocumentTranslationService:
                 job_paths.translation_2_md.write_text(body_text, encoding="utf-8")
             job_paths.resolved_md.write_text(body_text, encoding="utf-8")
             discrepancies.clear()
+        elif (
+            opts.resume
+            and resume_state is not None
+            and resume_state.stage == CheckpointStage.COMPLETED
+            and job_paths.resolved_md.is_file()
+        ):
+            metadata.resumed_from_checkpoint = True
+            discrepancies.clear()
         else:
             source_chunks = chunk_document(
                 body_text,
@@ -590,8 +737,44 @@ class DocumentTranslationService:
                 overlap_sentences=self.config.chunk_overlap_sentences,
             )
             metadata.chunk_count = len(source_chunks)
+            write_extract_chunk_checkpoints(
+                job_paths.checkpoints_extract_dir,
+                chunks=[chunk.text for chunk in source_chunks],
+            )
             document_summary = build_document_summary(body_text)
             translation_context = opts.translation_context or ""
+
+            def make_chunk_callback(pass_num: int):
+                def _on_chunk_complete(chunk_index: int, text: str) -> None:
+                    write_chunk_checkpoint(
+                        job_paths.checkpoints_dir,
+                        pass_num=pass_num,
+                        chunk_index=chunk_index,
+                        text=text,
+                        source_hash=body_hash,
+                        llm=self.config.llm,
+                    )
+                    persist_checkpoint(
+                        stage=CheckpointStage.TRANSLATING_PASS1
+                        if pass_num == 1
+                        else CheckpointStage.TRANSLATING_PASS2,
+                        chunk_index=chunk_index,
+                        pass_num=pass_num,
+                        source_hash=body_hash,
+                        chunk_count=len(source_chunks),
+                    )
+
+                return _on_chunk_complete
+
+            completed_pass1: dict[int, str] = {}
+            if opts.resume:
+                completed_pass1 = load_completed_chunks(
+                    job_paths.checkpoints_dir,
+                    pass_num=1,
+                    chunk_count=len(source_chunks),
+                    source_hash=body_hash,
+                    llm=self.config.llm,
+                )
 
             current_stage = PipelineStage.TRANSLATING
             current_progress = 0.3
@@ -615,13 +798,33 @@ class DocumentTranslationService:
                 is_legal=is_legal,
                 document_summary=document_summary,
                 translation_context=translation_context,
+                glossary=glossary,
                 max_workers=self.config.max_concurrent_chunks,
                 deadline=deadline,
+                completed_chunks=completed_pass1,
+                on_chunk_complete=make_chunk_callback(1),
             )
             trans1 = reassemble_chunks(trans1_chunks)
             job_paths.translation_1_md.write_text(trans1, encoding="utf-8")
+            persist_checkpoint(
+                stage=CheckpointStage.TRANSLATING_PASS2 if thorough else CheckpointStage.RECONCILING,
+                chunk_index=len(source_chunks) - 1,
+                pass_num=1,
+                source_hash=body_hash,
+                chunk_count=len(source_chunks),
+            )
 
             if thorough:
+                completed_pass2: dict[int, str] = {}
+                if opts.resume:
+                    completed_pass2 = load_completed_chunks(
+                        job_paths.checkpoints_dir,
+                        pass_num=2,
+                        chunk_count=len(source_chunks),
+                        source_hash=body_hash,
+                        llm=self.config.llm,
+                    )
+
                 current_progress = 0.5
                 pipeline_state["current_progress"] = current_progress
                 deadline.check(current_stage)
@@ -641,13 +844,23 @@ class DocumentTranslationService:
                     is_legal=is_legal,
                     document_summary=document_summary,
                     translation_context=translation_context,
+                    glossary=glossary,
                     max_workers=self.config.max_concurrent_chunks,
                     deadline=deadline,
+                    completed_chunks=completed_pass2,
+                    on_chunk_complete=make_chunk_callback(2),
                 )
                 if len(trans1_chunks) != len(trans2_chunks):
                     raise ChunkCountMismatchError(len(trans1_chunks), len(trans2_chunks))
                 trans2 = reassemble_chunks(trans2_chunks)
                 job_paths.translation_2_md.write_text(trans2, encoding="utf-8")
+                persist_checkpoint(
+                    stage=CheckpointStage.RECONCILING,
+                    chunk_index=len(source_chunks) - 1,
+                    pass_num=2,
+                    source_hash=body_hash,
+                    chunk_count=len(source_chunks),
+                )
 
                 current_stage = PipelineStage.RECONCILING
                 current_progress = 0.7
@@ -672,6 +885,7 @@ class DocumentTranslationService:
                     is_legal=is_legal,
                     document_summary=document_summary,
                     translation_context=translation_context,
+                    glossary=glossary,
                     similarity_threshold=self.config.similarity_threshold,
                     collector=collector,
                     deadline=deadline,
@@ -679,6 +893,13 @@ class DocumentTranslationService:
                 discrepancies.clear()
                 discrepancies.extend(new_discrepancies)
                 job_paths.resolved_md.write_text(resolved, encoding="utf-8")
+                persist_checkpoint(
+                    stage=CheckpointStage.COMPLETED,
+                    chunk_index=len(source_chunks) - 1,
+                    pass_num=2,
+                    source_hash=body_hash,
+                    chunk_count=len(source_chunks),
+                )
             else:
                 current_progress = 0.65
                 pipeline_state["current_progress"] = current_progress
@@ -691,6 +912,13 @@ class DocumentTranslationService:
                 )
                 discrepancies.clear()
                 job_paths.resolved_md.write_text(trans1, encoding="utf-8")
+                persist_checkpoint(
+                    stage=CheckpointStage.COMPLETED,
+                    chunk_index=len(source_chunks) - 1,
+                    pass_num=1,
+                    source_hash=body_hash,
+                    chunk_count=len(source_chunks),
+                )
 
         metadata.discrepancy_count = len(discrepancies)
         metadata.unresolved_breaking_count = sum(
@@ -755,6 +983,7 @@ class DocumentTranslationService:
                 job_paths.final_output,
                 job_paths.export_format,
                 subprocess_timeout_seconds=self.config.subprocess_timeout_seconds,
+                target_lang=opts.target_lang,
             )
             metadata.final_exported = True
         except RuntimeError as exc:
@@ -782,6 +1011,7 @@ class DocumentTranslationService:
             status=terminal_status,
             current_stage=current_stage,
             current_progress=current_progress,
+            keep_checkpoints=self.config.keep_work_files,
         )
 
     @staticmethod

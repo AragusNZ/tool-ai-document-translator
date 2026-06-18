@@ -61,6 +61,19 @@ def test_cleanup_respects_keep_work_files(tmp_path: Path) -> None:
     assert paths.combined_export_md.exists()
 
 
+def test_cleanup_respects_keep_checkpoints(tmp_path: Path) -> None:
+    paths = JobPaths(tmp_path / "runs", "job-checkpoint", export_format=ExportFormat.PDF)
+    paths.ensure_dirs()
+    paths.checkpoint_json.write_text("{}", encoding="utf-8")
+    paths.checkpoints_dir.mkdir(parents=True)
+    (paths.checkpoints_dir / "translate-pass1-chunk-0000.md").write_text("cached", encoding="utf-8")
+    paths.extracted_md.write_text("x", encoding="utf-8")
+    paths.cleanup_working_files(keep_checkpoints=True)
+    assert paths.checkpoint_json.exists()
+    assert paths.checkpoints_dir.exists()
+    assert paths.extracted_md.exists()
+
+
 def test_artifact_availability_terminal_keys(tmp_path: Path) -> None:
     paths = JobPaths(tmp_path / "runs", "job-avail", export_format=ExportFormat.PDF)
     paths.ensure_dirs()
@@ -81,6 +94,8 @@ def test_artifact_availability_terminal_keys(tmp_path: Path) -> None:
         "status_json",
         "extraction_layout_json",
         "screenshots_dir",
+        "checkpoint_json",
+        "checkpoints_dir",
     }
     assert availability["final_output"] is True
     assert availability["resolved_md"] is False

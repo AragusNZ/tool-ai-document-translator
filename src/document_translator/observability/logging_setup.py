@@ -27,7 +27,21 @@ class JsonLogFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
-        for key in ("job_id", "source_file", "issue_code", "stage", "scope", "progress", "status"):
+        for key in (
+            "job_id",
+            "source_file",
+            "issue_code",
+            "stage",
+            "scope",
+            "progress",
+            "status",
+            "extract_backend",
+            "page_num",
+            "native_chars",
+            "final_chars",
+            "ocr_applied",
+            "ocr_method",
+        ):
             if hasattr(record, key):
                 value = getattr(record, key)
                 if value is not None:
@@ -40,7 +54,10 @@ class JsonLogFormatter(logging.Formatter):
 def configure_logging(config: PipelineConfig) -> logging.Logger:
     logger = get_logger()
     logger.handlers.clear()
-    logger.setLevel(_resolve_level(config.log_level))
+    level = config.log_level
+    if config.extract_debug:
+        level = "DEBUG"
+    logger.setLevel(_resolve_level(level))
     logger.propagate = False
 
     handler = logging.StreamHandler(sys.stderr)

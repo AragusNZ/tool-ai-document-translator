@@ -16,12 +16,14 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "requires_pandoc: needs pandoc on PATH")
     config.addinivalue_line("markers", "requires_weasyprint: needs weasyprint working")
     config.addinivalue_line("markers", "requires_tesseract: needs tesseract-ocr on PATH")
+    config.addinivalue_line("markers", "requires_liteparse: needs liteparse optional extra installed")
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     skip_pandoc = pytest.mark.skip(reason="pandoc not installed")
     skip_weasyprint = pytest.mark.skip(reason="weasyprint not available")
     skip_tesseract = pytest.mark.skip(reason="tesseract not installed")
+    skip_liteparse = pytest.mark.skip(reason="liteparse not installed")
 
     for item in items:
         if "requires_pandoc" in item.keywords and shutil.which("pandoc") is None:
@@ -33,6 +35,11 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
                 item.add_marker(skip_weasyprint)
         if "requires_tesseract" in item.keywords and shutil.which("tesseract") is None:
             item.add_marker(skip_tesseract)
+        if "requires_liteparse" in item.keywords:
+            try:
+                import liteparse  # noqa: F401
+            except ImportError:
+                item.add_marker(skip_liteparse)
 
 
 @pytest.fixture

@@ -12,6 +12,7 @@ _DISPLAY_NAMES: dict[str, str] = {
     "en": "English",
     "es": "Spanish",
     "fr": "French",
+    "he": "Hebrew",
     "it": "Italian",
     "ja": "Japanese",
     "ko": "Korean",
@@ -25,6 +26,12 @@ _DISPLAY_NAMES: dict[str, str] = {
 }
 
 SUPPORTED_LANGUAGE_CODES: frozenset[str] = frozenset(_DISPLAY_NAMES)
+
+RTL_LANGUAGE_CODES: frozenset[str] = frozenset({"ar", "he"})
+
+
+def is_rtl_lang(code: str) -> bool:
+    return normalize_lang_code(code) in RTL_LANGUAGE_CODES
 
 
 def normalize_lang_code(code: str) -> str:
@@ -41,7 +48,9 @@ def lang_display_name(code: str) -> str:
 
 __all__ = [
     "DEFAULT_TARGET_LANG",
+    "RTL_LANGUAGE_CODES",
     "SUPPORTED_LANGUAGE_CODES",
+    "is_rtl_lang",
     "lang_display_name",
     "normalize_lang_code",
 ]

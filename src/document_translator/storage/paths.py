@@ -64,6 +64,23 @@ class JobPaths:
     def results_md(self) -> Path:
         return self.artifacts_dir / "results.md"
 
+    @property
+    def checkpoint_json(self) -> Path:
+        return self.artifacts_dir / "checkpoint.json"
+
+    @property
+    def checkpoints_dir(self) -> Path:
+        return self.artifacts_dir / "checkpoints"
+
+    @property
+    def checkpoints_extract_dir(self) -> Path:
+        return self.checkpoints_dir / "extract"
+
+    def chunk_checkpoint_path(self, *, pass_num: int, chunk_index: int) -> Path:
+        from document_translator.storage.checkpoint import chunk_checkpoint_name
+
+        return self.checkpoints_dir / chunk_checkpoint_name(pass_num=pass_num, chunk_index=chunk_index)
+
     def to_artifact_paths(self) -> ArtifactPaths:
         return ArtifactPaths(
             final_output=self.final_output if self.final_output.exists() else None,
@@ -76,6 +93,7 @@ class JobPaths:
         screenshots_available = (
             self.screenshots_dir.is_dir() and any(self.screenshots_dir.iterdir())
         )
+        checkpoints_available = self.checkpoint_json.is_file()
         return {
             "final_output": self.final_output.exists(),
             "resolved_md": self.resolved_md.exists(),
@@ -83,6 +101,8 @@ class JobPaths:
             "status_json": self.status_json.exists(),
             "extraction_layout_json": self.extraction_layout_json.exists(),
             "screenshots_dir": screenshots_available,
+            "checkpoint_json": checkpoints_available,
+            "checkpoints_dir": self.checkpoints_dir.is_dir() and checkpoints_available,
         }
 
     def working_file_paths(self) -> list[Path]:
@@ -95,12 +115,19 @@ class JobPaths:
             self.combined_export_md,
             self.results_md,
             self.discrepancies_json,
+            self.checkpoint_json,
         ]
 
     def working_file_dirs(self) -> list[Path]:
-        return [self.screenshots_dir]
+        return [self.screenshots_dir, self.checkpoints_dir]
 
-    def cleanup_working_files(self, *, keep_work_files: bool = False, keep_resolved: bool = False) -> None:
+    def cleanup_working_files(
+        self,
+        *,
+        keep_work_files: bool = False,
+        keep_resolved: bool = False,
+        keep_checkpoints: bool = False,
+    ) -> None:
         if keep_work_files:
             return
 
@@ -111,9 +138,18 @@ class JobPaths:
         for path in self.working_file_paths():
             if keep_resolved and path == self.resolved_md:
                 continue
+            if keep_checkpoints and path in {
+                self.extracted_md,
+                self.translation_1_md,
+                self.translation_2_md,
+                self.checkpoint_json,
+            }:
+                continue
             _safe_unlink(path)
 
         for directory in self.working_file_dirs():
+            if keep_checkpoints and directory == self.checkpoints_dir:
+                continue
             if directory.exists() and self.root in directory.parents:
                 shutil.rmtree(directory, ignore_errors=True)
 

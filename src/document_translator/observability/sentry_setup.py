@@ -71,3 +71,29 @@ def capture_sentry_exception(exc: BaseException) -> None:
     except ImportError:
         return
     sentry_sdk.capture_exception(exc)
+
+
+def add_extract_breadcrumb(
+    *,
+    backend: str | None,
+    pages: int | None,
+    ocr_pages: int,
+    source_file: str,
+) -> None:
+    if not _initialized:
+        return
+    try:
+        import sentry_sdk
+    except ImportError:
+        return
+    sentry_sdk.add_breadcrumb(
+        category="extract",
+        message="Extraction complete",
+        data={
+            "backend": backend,
+            "pages": pages,
+            "ocr_pages": ocr_pages,
+            "source_file": source_file,
+        },
+        level="info",
+    )

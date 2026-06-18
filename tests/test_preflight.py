@@ -207,6 +207,57 @@ def test_preflight_liteparse_backend_requires_stack(tmp_path: Path) -> None:
     assert imagemagick.status == CheckStatus.OK
 
 
+def test_preflight_pdf_ocr_server_warns_when_unreachable(tmp_path: Path) -> None:
+    config = PipelineConfig(
+        runs_dir=tmp_path / "runs",
+        llm="cursor:composer-2.5",
+        cursor_api_key="key",
+        pdf_ocr=False,
+        pdf_ocr_server_url="http://localhost:8828/ocr",
+    )
+    with (
+        patch("document_translator.lib.preflight.shutil.which", return_value="/usr/bin/pandoc"),
+        patch("document_translator.lib.preflight.import_module"),
+        patch.dict("sys.modules", {"weasyprint": object()}),
+        patch(
+            "document_translator.extract.ocr_http.probe_ocr_server",
+            return_value=(False, "connection refused"),
+        ),
+    ):
+        result = run_preflight_checks(config, export_format=ExportFormat.MD)
+
+    assert result.ready
+    ocr_server = next(check for check in result.checks if check.name == "pdf_ocr_server")
+    assert ocr_server.status == CheckStatus.WARN
+    assert not any(check.name == "tesseract" for check in result.checks)
+
+
+def test_preflight_require_ocr_allows_http_server_without_tesseract(tmp_path: Path) -> None:
+    config = PipelineConfig(
+        runs_dir=tmp_path / "runs",
+        llm="cursor:composer-2.5",
+        cursor_api_key="key",
+        pdf_ocr=True,
+        pdf_ocr_server_url="http://localhost:8828/ocr",
+    )
+    with (
+        patch("document_translator.lib.preflight.shutil.which", return_value="/usr/bin/pandoc"),
+        patch("document_translator.lib.preflight.import_module"),
+        patch("document_translator.lib.preflight.tesseract_available", return_value=False),
+        patch.dict("sys.modules", {"weasyprint": object()}),
+        patch(
+            "document_translator.extract.ocr_http.probe_ocr_server",
+            return_value=(True, "ok"),
+        ),
+    ):
+        result = run_preflight_checks(config, export_format=ExportFormat.PDF, require_ocr=True)
+
+    assert result.ready
+    tess = next(check for check in result.checks if check.name == "tesseract")
+    assert tess.status == CheckStatus.WARN
+    assert tess.required is False
+
+
 def test_preflight_auto_backend_warns_on_missing_liteparse_stack(tmp_path: Path) -> None:
     import importlib
 

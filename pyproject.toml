@@ -21,6 +21,7 @@ dependencies = [
     "weasyprint>=62,<67",
     "mammoth>=1.8,<2",
     "markdownify>=0.13,<1",
+    "ebooklib>=0.18,<1",
     "langdetect>=1.0.9,<2",
     "rapidfuzz>=3.9,<4",
     "cursor-sdk>=0.1,<1",
@@ -65,6 +66,7 @@ markers = [
   "requires_pandoc: needs pandoc on PATH",
   "requires_weasyprint: needs weasyprint working",
   "requires_tesseract: needs tesseract-ocr on PATH",
+  "requires_liteparse: needs liteparse optional extra installed",
 ]
 
 [tool.coverage.run]

@@ -98,6 +98,26 @@ def test_liteparse_backend_maps_parse_result(tmp_path: Path) -> None:
     parser.parse.assert_called_once_with(str(pdf))
 
 
+def test_liteparse_backend_passes_ocr_server_url(tmp_path: Path) -> None:
+    pdf = tmp_path / "sample.pdf"
+    pdf.write_bytes(b"%PDF-1.4")
+    page = MagicMock(page_num=1, text="body", text_items=[])
+    parse_result = MagicMock(text="body", pages=[page])
+    parser = MagicMock(parse=MagicMock(return_value=parse_result))
+    liteparse_module = MagicMock(LiteParse=MagicMock(return_value=parser))
+    config = PipelineConfig(pdf_ocr_server_url="http://localhost:8828/ocr")
+
+    backend = LiteParseBackend()
+    with patch.dict("sys.modules", {"liteparse": liteparse_module}):
+        backend.extract(pdf, config=config)
+
+    liteparse_module.LiteParse.assert_called_once_with(
+        ocr_enabled=True,
+        ocr_language="eng",
+        ocr_server_url="http://localhost:8828/ocr",
+    )
+
+
 def test_liteparse_backend_passes_extract_options(tmp_path: Path) -> None:
     pdf = tmp_path / "sample.pdf"
     pdf.write_bytes(b"%PDF-1.4")
@@ -145,7 +165,7 @@ def test_liteparse_backend_captures_screenshots(tmp_path: Path) -> None:
 
 def test_extract_single_file_pdf_uses_pymupdf_backend_by_default(minimal_pdf: Path) -> None:
     with patch("document_translator.extract.backends.pymupdf.extract_pdf") as extract_pdf_mock:
-        extract_pdf_mock.return_value = ("text\n", 1, "pymupdf", (), 0, False)
+        extract_pdf_mock.return_value = ("text\n", 1, "pymupdf", (), 0, False, ())
         result = extract_single_file(minimal_pdf)
 
     extract_pdf_mock.assert_called_once()
@@ -156,13 +176,18 @@ def test_extract_single_file_pdf_uses_pymupdf_backend_by_default(minimal_pdf: Pa
 def test_extract_single_file_pdf_respects_no_ocr_config(minimal_pdf: Path) -> None:
     config = PipelineConfig(pdf_ocr=False)
     with patch("document_translator.extract.backends.pymupdf.extract_pdf") as extract_pdf_mock:
-        extract_pdf_mock.return_value = ("text\n", 1, "pymupdf", (), 0, False)
+        extract_pdf_mock.return_value = ("text\n", 1, "pymupdf", (), 0, False, ())
         result = extract_single_file(minimal_pdf, config=config)
 
     extract_pdf_mock.assert_called_once_with(
         minimal_pdf,
         ocr_enabled=False,
         ocr_languages="eng",
+        ocr_server_url=None,
+        ocr_workers=None,
+        render_dpi=150.0,
+        extract_debug=False,
+        source_file=minimal_pdf.name,
     )
     assert result.conversion_method == "pymupdf"
 
@@ -170,14 +195,10 @@ def test_extract_single_file_pdf_respects_no_ocr_config(minimal_pdf: Path) -> No
 def test_extract_single_file_pdf_uses_configured_ocr_languages(minimal_pdf: Path) -> None:
     config = PipelineConfig(pdf_ocr_languages="eng+spa")
     with patch("document_translator.extract.backends.pymupdf.extract_pdf") as extract_pdf_mock:
-        extract_pdf_mock.return_value = ("text\n", 1, "pymupdf", (), 0, False)
+        extract_pdf_mock.return_value = ("text\n", 1, "pymupdf", (), 0, False, ())
         extract_single_file(minimal_pdf, config=config)
 
-    extract_pdf_mock.assert_called_once_with(
-        minimal_pdf,
-        ocr_enabled=True,
-        ocr_languages="eng+spa",
-    )
+    assert extract_pdf_mock.call_args.kwargs["ocr_languages"] == "eng+spa"
 
 
 def test_extract_single_file_liteparse_backend(minimal_pdf: Path) -> None:

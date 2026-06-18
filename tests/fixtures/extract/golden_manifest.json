@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "file": "dual_column_text.pdf",
+      "backend": "pymupdf",
+      "pdf_ocr": false,
+      "min_chars": 10,
+      "normalized_text_sha256": "35191b28229ad2a125cdfd623c7d923ecc421fe21bf84b9059538b1108f5fe06"
+    },
+    {
+      "file": "empty_page_between.pdf",
+      "backend": "pymupdf",
+      "pdf_ocr": false,
+      "min_chars": 10,
+      "normalized_text_sha256": "37ef8801b9536997f529f78604510c3b2f23a83c9a6d109ddf58e6a28fca40b6"
+    },
+    {
+      "file": "legal_keywords.pdf",
+      "backend": "pymupdf",
+      "pdf_ocr": false,
+      "min_chars": 10,
+      "normalized_text_sha256": "886d9dbf19c817ceb4e6eb4d037597cd3da9c753faea0b970e4c90ee191a1bf0"
+    },
+    {
+      "file": "multi_page_three.pdf",
+      "backend": "pymupdf",
+      "pdf_ocr": false,
+      "min_chars": 10,
+      "normalized_text_sha256": "3dd890e3d50e4ba14ca67bf3e553b1829a22bfb1b3103858798f0c23780bbb89"
+    },
+    {
+      "file": "single_page_text.pdf",
+      "backend": "pymupdf",
+      "pdf_ocr": false,
+      "min_chars": 10,
+      "normalized_text_sha256": "e58dc69393569d102e4c3f3ea4b22512c9b012d4f78e30a24532b99a17088ac9"
+    },
+    {
+      "file": "slide_markers.pdf",
+      "backend": "pymupdf",
+      "pdf_ocr": false,
+      "min_chars": 10,
+      "normalized_text_sha256": "fb97d7dfbf9bb1a9ae332f3259bbec2aa8bcb59406290d297921ea9ef2f84c07"
+    },
+    {
+      "file": "unicode_symbols.pdf",
+      "backend": "pymupdf",
+      "pdf_ocr": false,
+      "min_chars": 10,
+      "normalized_text_sha256": "b46d3e7ea1c47045372f5d0701dc4bd1d3cede4401c6e450134252f81eae8eaf"
+    },
+    {
+      "file": "whitespace_edges.pdf",
+      "backend": "pymupdf",
+      "pdf_ocr": false,
+      "min_chars": 10,
+      "normalized_text_sha256": "e26cdff9808eb6493321b0152f07890e8a44cfab7c696c67213d3e7d6ce82b0b"
+    },
+    {
+      "file": "dual_column_text.pdf",
+      "backend": "liteparse",
+      "pdf_ocr": false,
+      "min_chars": 10,
+      "normalized_text_sha256": "f3641e60da88ac48529a90608e565b850623ee3fb1110e59ff1b2daa06cc93ad",
+      "requires_liteparse": true
+    },
+    {
+      "file": "empty_page_between.pdf",
+      "backend": "liteparse",
+      "pdf_ocr": false,
+      "min_chars": 10,
+      "normalized_text_sha256": "3554b65b4750af9260513741ec5d086a8b6a689cf703e0602279762cbafe191c",
+      "requires_liteparse": true
+    },
+    {
+      "file": "legal_keywords.pdf",
+      "backend": "liteparse",
+      "pdf_ocr": false,
+      "min_chars": 10,
+      "normalized_text_sha256": "886d9dbf19c817ceb4e6eb4d037597cd3da9c753faea0b970e4c90ee191a1bf0",
+      "requires_liteparse": true
+    },
+    {
+      "file": "multi_page_three.pdf",
+      "backend": "liteparse",
+      "pdf_ocr": false,
+      "min_chars": 10,
+      "normalized_text_sha256": "3dd890e3d50e4ba14ca67bf3e553b1829a22bfb1b3103858798f0c23780bbb89",
+      "requires_liteparse": true
+    },
+    {
+      "file": "single_page_text.pdf",
+      "backend": "liteparse",
+      "pdf_ocr": false,
+      "min_chars": 10,
+      "normalized_text_sha256": "e58dc69393569d102e4c3f3ea4b22512c9b012d4f78e30a24532b99a17088ac9",
+      "requires_liteparse": true
+    },
+    {
+      "file": "slide_markers.pdf",
+      "backend": "liteparse",
+      "pdf_ocr": false,
+      "min_chars": 10,
+      "normalized_text_sha256": "a8aaf868c34875b311423a409085fe76bd1918057e52626163d12efee1cdc8af",
+      "requires_liteparse": true
+    },
+    {
+      "file": "unicode_symbols.pdf",
+      "backend": "liteparse",
+      "pdf_ocr": false,
+      "min_chars": 10,
+      "normalized_text_sha256": "b46d3e7ea1c47045372f5d0701dc4bd1d3cede4401c6e450134252f81eae8eaf",
+      "requires_liteparse": true
+    },
+    {
+      "file": "whitespace_edges.pdf",
+      "backend": "liteparse",
+      "pdf_ocr": false,
+      "min_chars": 10,
+      "normalized_text_sha256": "e26cdff9808eb6493321b0152f07890e8a44cfab7c696c67213d3e7d6ce82b0b",
+      "requires_liteparse": true
+    }
+  ]
+}

@@ -18,6 +18,7 @@ from document_translator.reconcile.analyze import (
 )
 from document_translator.reconcile.compare import compare_chunk_pair, split_sentences
 from document_translator.report.collector import IssueCollector
+from document_translator.translate.glossary import Glossary
 from document_translator.translate.service import build_third_pass_prompt, build_translation_system
 from document_translator.types import PipelineStage
 
@@ -33,6 +34,7 @@ def reconcile_translations(
     is_legal: bool,
     document_summary: str = "",
     translation_context: str = "",
+    glossary: Glossary | None = None,
     similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
     collector: IssueCollector | None = None,
     deadline: JobDeadline | None = None,
@@ -51,6 +53,8 @@ def reconcile_translations(
     resolved_chunks: list[str] = []
     discrepancies: list[Discrepancy] = []
 
+    glossary_tokens = glossary.protected_tokens() if glossary else None
+
     for chunk_idx, source_chunk in enumerate(source_chunks):
         if deadline is not None:
             deadline.check(PipelineStage.RECONCILING)
@@ -58,7 +62,9 @@ def reconcile_translations(
         t2 = translation_2_chunks[chunk_idx]
         src_text = source_chunk.text
 
-        flagged = compare_chunk_pair(t1, t2, similarity_threshold=similarity_threshold)
+        flagged = compare_chunk_pair(
+            t1, t2, similarity_threshold=similarity_threshold, glossary_tokens=glossary_tokens
+        )
         if not flagged:
             resolved_chunks.append(t1 or t2)
             continue
@@ -115,7 +121,7 @@ def reconcile_translations(
                     resolved_sentences[idx] = disc.resolution
             else:
                 variant_3 = llm.complete(
-                    build_translation_system(target_lang),
+                    build_translation_system(target_lang, glossary=glossary),
                     build_third_pass_prompt(
                         source_chunk=source_chunk,
                         source_span=source_span or src_text,
@@ -125,6 +131,7 @@ def reconcile_translations(
                         document_summary=document_summary,
                         translation_context=translation_context,
                         section_context=source_chunk.heading_context,
+                        glossary=glossary,
                     ),
                 )
                 prog_text, prog_idx, needs_ai = programmatic_pick_variant(s1, s2, variant_3)

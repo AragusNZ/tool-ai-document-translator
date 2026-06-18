@@ -6,6 +6,7 @@ from document_translator.observability.context import IssueContext, IssueListene
 from document_translator.observability.listeners import LoggingIssueListener, SentryIssueListener
 from document_translator.observability.logging_setup import configure_logging, get_logger
 from document_translator.observability.sentry_setup import (
+    add_extract_breadcrumb,
     capture_sentry_exception,
     finish_sentry_transaction,
     init_sentry,
@@ -50,6 +51,7 @@ __all__ = [
     "IssueListener",
     "LoggingIssueListener",
     "SentryIssueListener",
+    "add_extract_breadcrumb",
     "build_issue_listeners",
     "capture_sentry_exception",
     "configure_logging",

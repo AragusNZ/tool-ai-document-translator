@@ -87,6 +87,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Disable OCR fallback for scanned/image-only PDFs (PyMuPDF text extraction only)",
     )
     translate.add_argument(
+        "--pdf-ocr-server-url",
+        default=None,
+        help="HTTP OCR server URL (LiteParse OCR API: POST /ocr); used by pymupdf and liteparse backends",
+    )
+    translate.add_argument(
+        "--pdf-ocr-workers",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Concurrent OCR workers for sparse PDF pages (default: min(4, cpu-1))",
+    )
+    translate.add_argument(
+        "--extract-debug",
+        action="store_true",
+        help="Emit structured per-page extract debug logs (also DOCUMENT_TRANSLATOR_EXTRACT_DEBUG=1)",
+    )
+    translate.add_argument(
         "--extract-backend",
         choices=["auto", "pymupdf", "liteparse"],
         default=None,
@@ -115,6 +132,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Capture per-page PNG screenshots during LiteParse extraction",
     )
     translate.add_argument(
+        "--preserve-layout",
+        action="store_true",
+        help="Translate layout-preserving text from LiteParse (layout_text) when available",
+    )
+    translate.add_argument(
         "--no-translate",
         action="store_true",
         help="Skip translation; export extracted text without translating",
@@ -128,6 +150,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-cover-page",
         action="store_true",
         help="Export final document without the cover page",
+    )
+    translate.add_argument(
+        "--glossary",
+        type=Path,
+        default=None,
+        help="JSON glossary file (term → preferred translation or do-not-translate)",
+    )
+    translate.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume translation from checkpoint.json in an existing job directory",
     )
     translate.add_argument(
         "--timeout",
@@ -146,7 +179,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional HMAC secret for X-Document-Translator-Signature (DOCUMENT_TRANSLATOR_WEBHOOK_SECRET)",
     )
-    translate.add_argument("--config", type=Path, default=None, help="Optional JSON config (PipelineConfig + export_format + target_lang + source_lang + translation_context + translation_mode + no_translate + save_resolved + no_cover_page + pdf_ocr + extract_backend + target_pages + pdf_password + extract_dpi + extract_screenshots + job_timeout_seconds + webhook_url + webhook_secret)")
+    translate.add_argument("--config", type=Path, default=None, help="Optional JSON config (PipelineConfig + export_format + target_lang + source_lang + translation_context + translation_mode + no_translate + save_resolved + no_cover_page + glossary + resume + preserve_layout + pdf_ocr + extract_backend + target_pages + pdf_password + extract_dpi + extract_screenshots + job_timeout_seconds + webhook_url + webhook_secret)")
 
     check = sub.add_parser("check", help="Verify system dependencies and configuration")
     check.add_argument("--format", choices=["text", "json"], default="text", help="Output format")
@@ -171,6 +204,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-pdf-ocr",
         action="store_true",
         help="Skip Tesseract check (matches translate --no-pdf-ocr)",
+    )
+    check.add_argument(
+        "--pdf-ocr-server-url",
+        default=None,
+        help="Probe HTTP OCR server (LiteParse POST /ocr API)",
     )
     check.add_argument(
         "--extract-backend",
@@ -254,6 +292,7 @@ def _preflight_translate_inputs(
     force_overwrite: bool,
     *,
     max_input_bytes: int | None,
+    resume: bool = False,
 ) -> int | None:
     for input_path in inputs:
         try:
@@ -262,7 +301,7 @@ def _preflight_translate_inputs(
             print(str(exc), file=sys.stderr)
             return 1
 
-    if not force_overwrite:
+    if not force_overwrite and not resume:
         for job_id in job_ids:
             try:
                 job_root = resolve_job_root(runs_dir, job_id)
@@ -271,6 +310,18 @@ def _preflight_translate_inputs(
                 return 1
             if job_root.exists():
                 print(f"Job directory already exists: {job_root}. Use --force-overwrite.", file=sys.stderr)
+                return 1
+
+    if resume:
+        for job_id in job_ids:
+            try:
+                job_root = resolve_job_root(runs_dir, job_id)
+            except ValueError as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
+            checkpoint = job_root / "artifacts" / "checkpoint.json"
+            if not checkpoint.is_file():
+                print(f"Cannot resume: missing checkpoint at {checkpoint}", file=sys.stderr)
                 return 1
     return None
 
@@ -321,6 +372,24 @@ def _load_translate_config(
     if args.no_pdf_ocr:
         config.pdf_ocr = False
 
+    if args.pdf_ocr_server_url is not None:
+        try:
+            config = PipelineConfig.model_validate(
+                {**config.model_dump(), "pdf_ocr_server_url": args.pdf_ocr_server_url}
+            )
+        except ValidationError as exc:
+            print(str(exc), file=sys.stderr)
+            return None
+
+    if args.pdf_ocr_workers is not None:
+        if args.pdf_ocr_workers <= 0:
+            print("--pdf-ocr-workers must be a positive integer", file=sys.stderr)
+            return None
+        config.pdf_ocr_workers = args.pdf_ocr_workers
+
+    if args.extract_debug:
+        config.extract_debug = True
+
     if args.extract_backend is not None:
         config.extract_backend = args.extract_backend
 
@@ -338,6 +407,12 @@ def _load_translate_config(
 
     if args.extract_screenshots:
         config.extract_screenshots = True
+
+    if args.preserve_layout:
+        config.preserve_layout = True
+
+    if args.glossary is not None:
+        config.glossary_path = args.glossary
 
     if args.timeout is not None:
         if args.timeout <= 0:
@@ -430,6 +505,10 @@ def _build_translation_options(
     if "no_cover_page" in config_overrides:
         no_cover_page = bool(config_overrides["no_cover_page"])
 
+    resume = args.resume
+    if "resume" in config_overrides:
+        resume = bool(config_overrides["resume"])
+
     return TranslationOptions(
         job_id=job_id,
         force_overwrite=args.force_overwrite,
@@ -441,6 +520,7 @@ def _build_translation_options(
         no_translate=no_translate,
         save_resolved=save_resolved,
         no_cover_page=no_cover_page,
+        resume=resume,
     )
 
 
@@ -511,6 +591,14 @@ def _run_check(args: argparse.Namespace) -> int:
             return 1
     if args.no_pdf_ocr:
         config.pdf_ocr = False
+    if args.pdf_ocr_server_url is not None:
+        try:
+            config = PipelineConfig.model_validate(
+                {**config.model_dump(), "pdf_ocr_server_url": args.pdf_ocr_server_url}
+            )
+        except ValidationError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
     if args.extract_backend is not None:
         config.extract_backend = args.extract_backend
 
@@ -570,6 +658,7 @@ def main(argv: list[str] | None = None) -> int:
         runs_dir,
         args.force_overwrite,
         max_input_bytes=config.max_input_bytes,
+        resume=args.resume or bool(config_overrides.get("resume")),
     )
     if preflight_code is not None:
         return preflight_code

@@ -93,3 +93,47 @@ def test_extract_legacy_doc_via_pandoc(tmp_path: Path) -> None:
 
     assert "Legacy doc extraction test" in result.text
     assert result.conversion_method == "pandoc"
+
+
+@pytest.fixture
+def minimal_epub(tmp_path: Path) -> Path:
+    import ebooklib
+    from ebooklib import epub
+
+    book = epub.EpubBook()
+    book.set_identifier("sample-epub-id")
+    book.set_title("Sample EPUB")
+    book.set_language("en")
+
+    chapter = epub.EpubHtml(title="Chapter 1", file_name="chap_01.xhtml", lang="en")
+    chapter.content = "<h1>Chapter</h1><p>Hello EPUB world.</p>"
+    book.add_item(chapter)
+    book.spine = ["nav", chapter]
+    book.toc = [chapter]
+    book.add_item(epub.EpubNcx())
+    book.add_item(epub.EpubNav())
+
+    path = tmp_path / "sample.epub"
+    epub.write_epub(str(path), book)
+    return path
+
+
+def test_extract_epub(minimal_epub: Path) -> None:
+    result = extract_single_file(minimal_epub)
+    assert "Hello EPUB world" in result.text
+    assert result.conversion_method == "ebooklib"
+
+
+def test_extract_html_with_markdownify_fallback(tmp_path: Path) -> None:
+    html = tmp_path / "page.html"
+    html.write_text("<html><body><h1>Title</h1><p>Hello HTML world.</p></body></html>", encoding="utf-8")
+
+    with patch(
+        "document_translator.extract.html.run_pandoc_to_markdown",
+        side_effect=RuntimeError("pandoc unavailable"),
+    ):
+        result = extract_single_file(html)
+
+    assert "Hello HTML world" in result.text
+    assert result.conversion_method == "markdownify"
+    assert result.conversion_warnings

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from document_translator.config.defaults import (
@@ -15,15 +16,22 @@ from document_translator.errors import IssueCode, PipelineError
 from document_translator.lib.job_control import JobDeadline
 from document_translator.lib.llm.protocol import LLMClient
 from document_translator.lib.text.chunker import TextChunk, chunk_document, reassemble_chunks
+from document_translator.translate.glossary import Glossary
 from document_translator.types import PipelineStage
 
 
-def build_translation_system(target_lang: str) -> str:
+def build_translation_system(target_lang: str, *, glossary: Glossary | None = None) -> str:
     language = lang_display_name(target_lang)
+    glossary_note = ""
+    if glossary and len(glossary) > 0:
+        glossary_note = (
+            " Honor glossary terms exactly: keep do-not-translate terms unchanged "
+            "and use preferred translations when provided."
+        )
     return f"""You are a professional document translator.
 Translate the user's text faithfully into {language} ({target_lang}).
 Preserve markdown structure: headings, lists, numbering, and paragraph breaks.
-For legal text, preserve modal verbs (shall/may/must), party names, dates, currency, and amounts exactly.
+For legal text, preserve modal verbs (shall/may/must), party names, dates, currency, and amounts exactly.{glossary_note}
 Return ONLY the translated markdown chunk with no commentary or preamble."""
 
 
@@ -56,10 +64,15 @@ def _build_context_sections(
     document_summary: str = "",
     translation_context: str = "",
     section_context: str = "",
+    glossary: Glossary | None = None,
 ) -> str:
     parts: list[str] = []
     if translation_context.strip():
         parts.append(f"Translation context:\n{translation_context.strip()}")
+    if glossary is not None:
+        glossary_block = glossary.format_for_prompt()
+        if glossary_block:
+            parts.append(glossary_block)
     if document_summary.strip():
         parts.append(f"Document summary:\n{document_summary.strip()}")
     if section_context.strip():
@@ -79,6 +92,7 @@ def build_third_pass_prompt(
     document_summary: str,
     translation_context: str = "",
     section_context: str = "",
+    glossary: Glossary | None = None,
 ) -> str:
     legal_note = " This is a legal document — preserve obligations and defined terms precisely." if is_legal else ""
     target_language = lang_display_name(target_lang)
@@ -86,6 +100,7 @@ def build_third_pass_prompt(
         document_summary=document_summary,
         translation_context=translation_context,
         section_context=section_context or source_chunk.heading_context,
+        glossary=glossary,
     )
     return (
         f"Source language: {source_lang}. Target language: {target_language} ({target_lang}).{legal_note}\n"
@@ -102,6 +117,7 @@ def _build_user_prompt(
     *,
     document_summary: str = "",
     translation_context: str = "",
+    glossary: Glossary | None = None,
 ) -> str:
     legal_note = " This is a legal document — preserve obligations and defined terms precisely." if is_legal else ""
     target_language = lang_display_name(target_lang)
@@ -109,6 +125,7 @@ def _build_user_prompt(
         document_summary=document_summary,
         translation_context=translation_context,
         section_context=chunk.heading_context,
+        glossary=glossary,
     )
     return (
         f"Source language: {source_lang}. Target language: {target_language} ({target_lang}).{legal_note}\n"
@@ -127,11 +144,15 @@ def translate_chunks(
     is_legal: bool = False,
     document_summary: str = "",
     translation_context: str = "",
+    glossary: Glossary | None = None,
     max_workers: int = 4,
     deadline: JobDeadline | None = None,
+    completed_chunks: dict[int, str] | None = None,
+    on_chunk_complete: Callable[[int, str], None] | None = None,
 ) -> list[str]:
-    results: dict[int, str] = {}
-    system_prompt = build_translation_system(target_lang)
+    results: dict[int, str] = dict(completed_chunks or {})
+    system_prompt = build_translation_system(target_lang, glossary=glossary)
+    pending = [chunk for chunk in chunks if chunk.index not in results]
 
     def translate_one(chunk: TextChunk) -> tuple[int, str]:
         translated = llm.complete(
@@ -143,12 +164,16 @@ def translate_chunks(
                 is_legal,
                 document_summary=document_summary,
                 translation_context=translation_context,
+                glossary=glossary,
             ),
         )
         return chunk.index, translated.strip()
 
+    if not pending:
+        return [results[i] for i in range(len(chunks))]
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(translate_one, c): c.index for c in chunks}
+        futures = {executor.submit(translate_one, c): c.index for c in pending}
         for future in as_completed(futures):
             if deadline is not None:
                 deadline.check(PipelineStage.TRANSLATING)
@@ -164,8 +189,10 @@ def translate_chunks(
                     scope={"chunk_index": str(chunk_idx)},
                 ) from exc
             results[idx] = text
+            if on_chunk_complete is not None:
+                on_chunk_complete(idx, text)
 
-    return [results[i] for i in sorted(results)]
+    return [results[i] for i in range(len(chunks))]
 
 
 def translate_document(
@@ -177,6 +204,7 @@ def translate_document(
     is_legal: bool = False,
     document_summary: str = "",
     translation_context: str = "",
+    glossary: Glossary | None = None,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     overlap_sentences: int = DEFAULT_CHUNK_OVERLAP,
     max_workers: int = 4,
@@ -190,6 +218,7 @@ def translate_document(
         is_legal=is_legal,
         document_summary=document_summary,
         translation_context=translation_context,
+        glossary=glossary,
         max_workers=max_workers,
     )
     return reassemble_chunks(translated), len(chunks)
@@ -204,8 +233,11 @@ def translate_source_chunks(
     is_legal: bool = False,
     document_summary: str = "",
     translation_context: str = "",
+    glossary: Glossary | None = None,
     max_workers: int = 4,
     deadline: JobDeadline | None = None,
+    completed_chunks: dict[int, str] | None = None,
+    on_chunk_complete: Callable[[int, str], None] | None = None,
 ) -> list[str]:
     return translate_chunks(
         llm,
@@ -215,6 +247,9 @@ def translate_source_chunks(
         is_legal=is_legal,
         document_summary=document_summary,
         translation_context=translation_context,
+        glossary=glossary,
         max_workers=max_workers,
         deadline=deadline,
+        completed_chunks=completed_chunks,
+        on_chunk_complete=on_chunk_complete,
     )

@@ -17,6 +17,9 @@ INPUT_SUFFIX_TO_EXPORT: dict[str, str] = {
     ".txt": "txt",
     ".md": "md",
     ".markdown": "md",
+    ".epub": "epub",
+    ".html": "html",
+    ".htm": "html",
     ".pptx": "pdf",
     ".ppt": "pdf",
     ".xlsx": "pdf",
@@ -40,6 +43,8 @@ class ExportFormat(str, Enum):
     RTF = "rtf"
     TXT = "txt"
     MD = "md"
+    EPUB = "epub"
+    HTML = "html"
 
 
 def resolve_export_format(*, input_path: Path, requested: ExportFormat | None) -> ExportFormat:

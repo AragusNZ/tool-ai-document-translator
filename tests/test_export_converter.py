@@ -24,18 +24,27 @@ def test_export_markdown_pdf_delegates(tmp_path: Path) -> None:
     source.write_text("# Title", encoding="utf-8")
     target = tmp_path / "out.pdf"
     with patch("document_translator.export.converter.convert_markdown_to_pdf") as mock_pdf:
-        export_markdown(source, target, ExportFormat.PDF)
-    mock_pdf.assert_called_once_with(source, target, timeout_seconds=None)
+        export_markdown(source, target, ExportFormat.PDF, target_lang="ar")
+    mock_pdf.assert_called_once_with(source, target, rtl=True, timeout_seconds=None)
 
 
-@pytest.mark.parametrize("fmt", [ExportFormat.DOCX, ExportFormat.ODT, ExportFormat.RTF, ExportFormat.TXT])
+def test_export_markdown_pdf_ltr_target(tmp_path: Path) -> None:
+    source = tmp_path / "doc.md"
+    source.write_text("# Title", encoding="utf-8")
+    target = tmp_path / "out.pdf"
+    with patch("document_translator.export.converter.convert_markdown_to_pdf") as mock_pdf:
+        export_markdown(source, target, ExportFormat.PDF, target_lang="en")
+    mock_pdf.assert_called_once_with(source, target, rtl=False, timeout_seconds=None)
+
+
+@pytest.mark.parametrize("fmt", [ExportFormat.DOCX, ExportFormat.ODT, ExportFormat.RTF, ExportFormat.TXT, ExportFormat.HTML, ExportFormat.EPUB])
 def test_export_markdown_pandoc_formats(tmp_path: Path, fmt: ExportFormat) -> None:
     source = tmp_path / "doc.md"
     source.write_text("# Title", encoding="utf-8")
     target = tmp_path / f"out.{fmt.value}"
     with patch("document_translator.export.converter.convert_markdown_with_pandoc") as mock_pandoc:
         export_markdown(source, target, fmt)
-    mock_pandoc.assert_called_once_with(source, target, fmt, timeout_seconds=None)
+    mock_pandoc.assert_called_once_with(source, target, fmt, timeout_seconds=None, target_lang=None, rtl=False)
 
 
 def test_export_markdown_doc_converts_via_docx(tmp_path: Path) -> None:

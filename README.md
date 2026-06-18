@@ -87,12 +87,14 @@ Each job writes artifacts under a stable `runs/{job_id}/` layout so external orc
 
 | Extension | Extraction method | Notes |
 |-----------|-------------------|-------|
-| `.pdf` | PyMuPDF (+ Tesseract OCR fallback) | Native text extraction; sparse pages OCR'd when Tesseract is installed (`--no-pdf-ocr` to disable) |
+| `.pdf` | PyMuPDF (+ Tesseract or HTTP OCR fallback) | Native text extraction; sparse pages OCR'd via Tesseract or `pdf_ocr_server_url` (`--no-pdf-ocr` to disable) |
 | `.docx` | Mammoth | Warnings surfaced if conversion is degraded |
 | `.doc` | LibreOffice or antiword | LibreOffice preferred when installed |
 | `.odt` | Pandoc | Requires `pandoc` on `PATH` |
 | `.rtf` | striprtf | Regex fallback if striprtf is unavailable |
 | `.txt`, `.md`, `.markdown` | Direct read | UTF-8 with replacement on invalid sequences |
+| `.epub` | ebooklib + markdownify | Chapter HTML converted to Markdown |
+| `.html`, `.htm` | Pandoc or markdownify | Pandoc preferred when installed |
 | `.pptx`, `.ppt`, `.xlsx`, `.xls` | LiteParse (optional) | Requires `[extract-liteparse]`, `libreoffice`, and Pandoc/WeasyPrint for PDF export; LibreOffice converts to PDF internally |
 | `.png`, `.jpg`, `.jpeg`, `.tiff`, `.webp` | LiteParse (optional) | Requires `[extract-liteparse]` and ImageMagick (`convert` or `magick` on `PATH`) |
 
@@ -104,8 +106,8 @@ Unsupported extensions fail at extraction with `UNSUPPORTED_FORMAT`.
 
 | Format | Mechanism | System dependencies |
 |--------|-----------|---------------------|
-| `pdf` | Pandoc + WeasyPrint | `pandoc`, WeasyPrint system libs |
-| `docx`, `odt`, `rtf`, `txt` | Pandoc | `pandoc` |
+| `pdf` | Pandoc + WeasyPrint | `pandoc`, WeasyPrint system libs; RTL CSS for Arabic (`ar`) and Hebrew (`he`) targets |
+| `docx`, `odt`, `rtf`, `txt`, `html`, `epub` | Pandoc | `pandoc`; `lang` metadata set from `--target-lang` |
 | `md` | Copy resolved Markdown | none |
 | `doc` | Pandoc → DOCX → LibreOffice | `pandoc`, `libreoffice` |
 
@@ -235,12 +237,16 @@ Settings are loaded from environment variables and optional JSON overrides. `Pip
 | `DOCUMENT_TRANSLATOR_LANG_CONFIDENCE_THRESHOLD` | No | `0.85` | Below this, language detection uses AI fallback |
 | `DOCUMENT_TRANSLATOR_FAIL_ON_EMPTY_EXTRACTION` | No | `false` | Fail the job if extraction yields no body text |
 | `DOCUMENT_TRANSLATOR_PDF_OCR` | No | `true` | Enable per-page OCR fallback for sparse PDF pages |
-| `DOCUMENT_TRANSLATOR_PDF_OCR_LANGUAGES` | No | `eng` | Tesseract language pack(s), e.g. `eng+spa` |
+| `DOCUMENT_TRANSLATOR_PDF_OCR_LANGUAGES` | No | `eng` | Tesseract language pack(s), e.g. `eng+spa` (mapped to HTTP OCR language when using a server) |
+| `DOCUMENT_TRANSLATOR_PDF_OCR_SERVER_URL` | No | — | HTTP OCR server implementing LiteParse `POST /ocr` (PyMuPDF + LiteParse backends) |
+| `DOCUMENT_TRANSLATOR_PDF_OCR_WORKERS` | No | `min(4, cpu-1)` | Concurrent OCR workers for sparse PDF pages (PyMuPDF backend) |
+| `DOCUMENT_TRANSLATOR_EXTRACT_DEBUG` | No | `false` | Structured per-page extract debug logs on stderr |
 | `DOCUMENT_TRANSLATOR_EXTRACT_BACKEND` | No | `auto` | Extraction backend: `auto`, `pymupdf`, or `liteparse` (requires `[extract-liteparse]`) |
 | `DOCUMENT_TRANSLATOR_TARGET_PAGES` | No | — | LiteParse page selector (e.g. `1-5,10`); ignored by pymupdf |
 | `DOCUMENT_TRANSLATOR_PDF_PASSWORD` | No | — | Password for encrypted PDFs (LiteParse backend only) |
 | `DOCUMENT_TRANSLATOR_EXTRACT_DPI` | No | — | Page render DPI for LiteParse extraction/screenshots |
 | `DOCUMENT_TRANSLATOR_EXTRACT_SCREENSHOTS` | No | `false` | Capture per-page PNG screenshots during LiteParse extraction |
+| `DOCUMENT_TRANSLATOR_PRESERVE_LAYOUT` | No | `false` | Use LiteParse `layout_text` as translation source when available |
 | `DOCUMENT_TRANSLATOR_KEEP_WORK_FILES` | No | `false` | Retain intermediate working files after job finalize (debug) |
 | `DOCUMENT_TRANSLATOR_JOB_TIMEOUT` / `JOB_TIMEOUT` | No | — | Maximum job duration in seconds (cooperative timeout between pipeline stages) |
 | `DOCUMENT_TRANSLATOR_WEBHOOK_URL` / `WEBHOOK_URL` | No | — | HTTPS URL to POST terminal job payload |
@@ -300,20 +306,26 @@ document-translator translate <input> [<input> ...] [options]
 | `--job-ids UUID [UUID ...]` | Job identifier per input; same character rules; count must match inputs; must be unique |
 | `--output-dir PATH` | Runs directory (default: `./runs` relative to project root) |
 | `--format {text,json}` | Stdout format on completion (default: `text`) |
-| `--export-format FORMAT` | Final document format: `pdf`, `docx`, `doc`, `odt`, `rtf`, `txt`, `md` (default: match input extension, else `pdf`) |
-| `--target-lang CODE` | Target output language as ISO 639-1 code (default: `en`) |
+| `--export-format FORMAT` | Final document format: `pdf`, `docx`, `doc`, `odt`, `rtf`, `txt`, `md`, `html`, `epub` (default: match input extension, else `pdf`) |
+| `--target-lang CODE` | Target output language as ISO 639-1 code (default: `en`); Arabic (`ar`) and Hebrew (`he`) enable RTL export styling |
 | `--source-lang CODE` | Source document language (ISO 639-1); skips detection for translation, warns if detection disagrees |
 | `--translation-context TEXT` | Per-job context (e.g. contract parties) included in every translation chunk prompt |
+| `--glossary PATH` | JSON glossary file (`term` → preferred translation or do-not-translate); also `glossary` / `glossary_path` in `--config` |
+| `--resume` | Resume a failed or interrupted job from `checkpoint.json` in an existing `runs/{job_id}/` directory |
 | `--mode {quick,thorough}` | Translation mode: `quick` (single pass, default) or `thorough` (dual-pass verification) |
 | `--no-translate` | Skip translation; export extracted text without translating (extraction and detection still run) |
 | `--save-resolved` | Keep resolved markdown (`04-resolved.md`) after job completes; path returned in CLI/JSON output |
 | `--no-cover-page` | Export final document without the cover page |
 | `--no-pdf-ocr` | Disable OCR fallback for scanned/image-only PDFs (PyMuPDF text extraction only) |
+| `--pdf-ocr-server-url URL` | HTTP OCR server (`POST /ocr` per LiteParse OCR API); used before Tesseract when set |
+| `--pdf-ocr-workers N` | Concurrent OCR workers for sparse PDF pages (PyMuPDF backend) |
+| `--extract-debug` | Emit per-page extract debug logs (sets log level to DEBUG for extract events) |
 | `--extract-backend {auto,pymupdf,liteparse}` | Extraction backend (`auto` uses PyMuPDF for PDF; LiteParse for office/image when installed) |
 | `--target-pages SPEC` | LiteParse page selector (e.g. `1-5,10`); limits extracted/translated body; pymupdf warns and ignores |
 | `--pdf-password PASSWORD` | Password for encrypted PDFs (LiteParse backend only) |
 | `--extract-dpi DPI` | Page render DPI for LiteParse extraction and screenshots |
 | `--extract-screenshots` | Write per-page PNGs to `artifacts/screenshots/` (LiteParse only; retained with `keep_work_files`) |
+| `--preserve-layout` | Translate LiteParse layout-preserving text (`layout_text`) instead of flat body when available |
 | `--timeout SECONDS` | Maximum job duration; fails with `JOB_TIMEOUT` when exceeded (also `DOCUMENT_TRANSLATOR_JOB_TIMEOUT`) |
 | `--webhook-url URL` | POST terminal job payload to URL after job artifacts are written (`DOCUMENT_TRANSLATOR_WEBHOOK_URL`; `http://` or `https://`) |
 | `--webhook-secret SECRET` | Optional HMAC secret for `X-Document-Translator-Signature` (`DOCUMENT_TRANSLATOR_WEBHOOK_SECRET`) |
@@ -335,7 +347,7 @@ Prints the supported LLM catalog from `supported_llms()` (`provider:model`, labe
 document-translator check [--format {text,json}] [options]
 ```
 
-Verifies the host is ready to run translation jobs before accepting uploads. Checks pandoc, weasyprint (for PDF export), Tesseract (when PDF OCR is enabled), the selected LLM provider package and API key, LiteParse/LibreOffice/ImageMagick (when `--extract-backend` is `liteparse` or `auto`), and that the runs directory is writable.
+Verifies the host is ready to run translation jobs before accepting uploads. Checks pandoc, weasyprint (for PDF export), Tesseract or HTTP OCR server (when PDF OCR is enabled), the selected LLM provider package and API key, LiteParse/LibreOffice/ImageMagick (when `--extract-backend` is `liteparse` or `auto`), and that the runs directory is writable.
 
 | Flag | Description |
 |------|-------------|
@@ -425,6 +437,10 @@ runs/{job_id}/
 
 During processing, intermediate files exist temporarily under `artifacts/` and `input/` but are removed on finalize.
 
+**Checkpoint resume:** On translation failure, per-chunk checkpoints under `artifacts/checkpoints/` and `artifacts/checkpoint.json` are retained. Re-run with `--resume --job-id {id}` to skip completed chunks (matched by source hash + LLM + chunk index). Checkpoints are removed on successful completion unless `keep_work_files` is enabled.
+
+**Glossary:** Pass `--glossary terms.json` or inline `"glossary": {"Acme Corp": "Acme Corp", "Vendedor": "Seller"}` in `--config`. Terms are injected into translation prompts and reconcile protected-token checks.
+
 When LiteParse extraction produces spatial data, working artifacts include `01-extraction-layout.json` (page `text_items` with bounding boxes) and optionally `artifacts/screenshots/page-NNNN.png`. These are removed on finalize unless `keep_work_files` is enabled; `artifact_availability.extraction_layout_json` and `artifact_availability.screenshots_dir` reflect whether they were retained.
 
 `status.json` is written atomically (temp file + rename) after each stage transition.
@@ -474,9 +490,9 @@ Issues appear in `metadata.issues`, the CLI JSON payload, and optionally Sentry:
 | `UNSUPPORTED_FORMAT` | error | File extension not supported |
 | `EMPTY_EXTRACTION` | warn / error | No text extracted (`fail_on_empty_extraction` controls failure) |
 | `LOW_TEXT_DENSITY` | warn | Few characters per page — possible scanned PDF (OCR may not have helped) |
-| `OCR_APPLIED` | info | One or more PDF pages extracted via Tesseract OCR |
+| `OCR_APPLIED` | info | One or more PDF pages extracted via OCR (Tesseract or HTTP server) |
 | `EXTRACT_OPTION_IGNORED` | warn | LiteParse-only extract flag set while using pymupdf backend |
-| `OCR_UNAVAILABLE` | warn | Sparse PDF pages detected but Tesseract is not installed |
+| `OCR_UNAVAILABLE` | warn | Sparse PDF pages detected but neither Tesseract nor HTTP OCR server is available |
 | `LARGE_INPUT_FILE` | warn | Input exceeds 20 MB |
 | `ENCODING_LOSS` | warn | Invalid UTF-8 replaced during read |
 | `CONVERSION_DEGRADED` | warn | DOCX/RTF conversion used a fallback or reported warnings |
@@ -662,7 +678,13 @@ pytest --cov=document_translator --cov-report=term-missing
 pytest -m "not integration"          # unit tests only
 pytest -m requires_pandoc              # needs pandoc on PATH
 pytest -m requires_weasyprint          # needs weasyprint + system libs
+pytest -m requires_liteparse           # needs [extract-liteparse] extra
+pytest tests/test_extract_regression.py  # golden extract regression (pymupdf on every PR)
 ```
+
+**Golden extraction regression:** `tests/fixtures/extract/` holds programmatic PDFs and `golden_manifest.json` (normalized text SHA-256 per backend). PyMuPDF cases run in the main CI test job; LiteParse cases run in [`.github/workflows/extract-liteparse.yml`](.github/workflows/extract-liteparse.yml). Refresh hashes after intentional extract changes: `UPDATE_GOLDEN=1 pytest tests/test_extract_regression.py`.
+
+**Extract benchmark harness:** `python -m tools.extract_eval.benchmark --input tests/fixtures/extract --qa --report report.html`. Backend routing recommendations: [docs/extract-backend-routing.md](docs/extract-backend-routing.md).
 
 Live `CURSOR_API_KEY` tests are intentionally excluded; use `MockLLMClient` for deterministic tests.
 
@@ -711,7 +733,22 @@ Design principles:
 
 Current limitations worth knowing before production use:
 
-- **Scanned PDF OCR** — Requires Tesseract on the host (included in the Docker image). Set `DOCUMENT_TRANSLATOR_PDF_OCR_LANGUAGES` to match the document language (e.g. `spa` for Spanish). Use `--no-pdf-ocr` to skip OCR.
+- **Scanned PDF OCR** — Uses Tesseract when installed (included in the Docker image), or an HTTP OCR server via `--pdf-ocr-server-url` / `DOCUMENT_TRANSLATOR_PDF_OCR_SERVER_URL` implementing the [LiteParse OCR API](https://github.com/run-llama/liteparse/blob/main/OCR_API_SPEC.md) (`POST /ocr`). Set `DOCUMENT_TRANSLATOR_PDF_OCR_LANGUAGES` to match the document language (e.g. `spa` for Spanish). Use `--no-pdf-ocr` to skip OCR.
+
+### Optional HTTP OCR server
+
+For higher-quality OCR than bundled Tesseract, run a compatible server and point the CLI at it:
+
+```bash
+# Example: LiteParse EasyOCR service (separate repo checkout)
+# uv run server.py  # listens on http://localhost:8828/ocr
+
+document-translator translate scan.pdf \
+  --pdf-ocr-server-url http://localhost:8828/ocr \
+  --pdf-ocr-workers 4
+```
+
+Verify connectivity with `document-translator check --pdf-ocr-server-url http://localhost:8828/ocr --format json` (look for the `pdf_ocr_server` check). Enable per-page diagnostics with `--extract-debug` or `DOCUMENT_TRANSLATOR_EXTRACT_DEBUG=1`.
 - **Job timeouts and cancellation** — Cooperative `--timeout` between stages; queue workers should set `Process::setTimeout()` slightly above the CLI timeout so `SIGTERM` yields `JOB_CANCELLED` in `status.json`.
 - **Rate limits** — All LLM clients retry transient errors (429, 5xx, Cursor `is_retryable`) via `lib/llm/retry.py` with exponential backoff and `Retry-After` / `retry_after` when provided (default: up to 6 attempts).
 
