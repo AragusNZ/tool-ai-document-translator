@@ -106,6 +106,18 @@ def test_bump_version_levels() -> None:
     assert release.bump_version("0.1.0", "0.3.4") == "0.3.4"
 
 
+def test_resolve_python_executable_prefers_project_venv(release_tree: Path) -> None:
+    venv_bin = release_tree / ".venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    venv_python = venv_bin / "python"
+    venv_python.write_text("#!/bin/sh\n", encoding="utf-8")
+    assert release.resolve_python_executable(release_tree) == venv_python
+
+
+def test_resolve_python_executable_falls_back_to_current_interpreter(release_tree: Path) -> None:
+    assert release.resolve_python_executable(release_tree) == Path(sys.executable)
+
+
 def test_bump_version_rejects_downgrade_target(release_tree: Path) -> None:
     with pytest.raises(release.ReleaseError, match="greater than current"):
         release.build_release_plan(release_tree, "0.1.0")

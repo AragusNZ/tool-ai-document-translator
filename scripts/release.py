@@ -64,6 +64,13 @@ def find_project_root(start: Path | None = None) -> Path:
     raise ReleaseError("Could not find project root (need pyproject.toml and CHANGELOG.md)")
 
 
+def resolve_python_executable(root: Path) -> Path:
+    venv_python = root / ".venv" / "bin" / "python"
+    if venv_python.is_file():
+        return venv_python
+    return Path(sys.executable)
+
+
 def read_version(pyproject_path: Path) -> str:
     content = pyproject_path.read_text(encoding="utf-8")
     match = VERSION_RE.search(content)
@@ -288,9 +295,10 @@ def print_plan_summary(plan: ReleasePlan, *, verbose: bool = False) -> None:
 
 
 def run_pytest_gate(root: Path, *, force: bool) -> None:
+    python = resolve_python_executable(root)
     result = subprocess.run(
         [
-            sys.executable,
+            str(python),
             "-m",
             "pytest",
             '-m',
@@ -307,6 +315,8 @@ def run_pytest_gate(root: Path, *, force: bool) -> None:
     if force:
         print("pytest failed; continuing because --yes was provided", file=sys.stderr)
         return
+    if python == Path(sys.executable) and not (root / ".venv" / "bin" / "python").is_file():
+        raise ReleaseError('pytest failed; install dev deps with: pip install -e ".[dev]"')
     raise ReleaseError("pytest failed; fix tests or pass --yes to continue anyway")
 
 
