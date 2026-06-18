@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+### Changed
+
+### Fixed
+
+## [0.2.0] - 2026-06-18
+
 ### Fixed
 
 - Checkpoint resume with `--preserve-layout` now restores layout translation source from `artifacts/checkpoints/extract/layout-body.md` instead of failing with `CHECKPOINT_MISMATCH`
@@ -65,7 +73,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Docker CI no longer pushes to GHCR on every `main` commit; image publish runs on `v*` tags only, with smoke tests on PRs and `main`
-
 ## [0.1.0] - 2026-06-17
 
 Initial Release
