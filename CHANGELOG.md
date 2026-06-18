@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.3.0] - 2026-06-18
+
+### Added
+
 - OCR for scanned PDFs — Tesseract-backed per-page fallback when native PDF text is sparse (`--no-pdf-ocr` to disable)
 - Quick run mode (`--mode quick`, default) and thorough dual-pass verification (`--mode thorough`)
 - Dual-pass translation with discrepancy reconciliation

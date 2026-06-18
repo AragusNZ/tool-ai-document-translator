@@ -191,7 +191,7 @@ ghcr.io/aragusnz/tool-ai-document-translator:latest
 Pull a release:
 
 ```bash
-docker pull ghcr.io/aragusnz/tool-ai-document-translator:0.2.0
+docker pull ghcr.io/aragusnz/tool-ai-document-translator:0.3.0
 ```
 
 ## Observability

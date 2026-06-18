@@ -4,7 +4,7 @@ AI document translation pipeline with configurable quick or dual-pass verificati
 
 Document Translator turns office documents into high-quality translations. It extracts text from common formats, translates via configurable LLM providers (Cursor, OpenAI, Anthropic, or Google — default `cursor:composer-2.5`), runs single-pass (`quick`, default) or dual-pass verification (`--mode thorough`), compares independent passes programmatically when thorough, and uses AI to resolve meaningful differences. The result is a single final document (cover page plus translation) in the chosen export format, with `metadata.json` for API polling and queue integration.
 
-**Current version:** 0.2.0 — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Current version:** 0.3.0 — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 **Default target language:** English (`en`). Use `--target-lang` to translate into any ISO 639-1 code (e.g. `es`, `fr`, `de`). When the detected source language matches the target, translation is skipped and text is passed through to export.
 

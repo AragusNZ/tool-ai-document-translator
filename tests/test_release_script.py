@@ -231,10 +231,28 @@ def test_publish_release_aborts_when_tag_exists(release_tree: Path) -> None:
     release.apply_release_plan(plan)
 
     with (
-        patch.object(release, "tag_exists", side_effect=[True]),
-        pytest.raises(release.ReleaseError, match="already exists locally"),
+        patch.object(release, "tag_exists", side_effect=[False, True]),
+        pytest.raises(release.ReleaseError, match="already exists on origin"),
     ):
         release.publish_release(plan, branch="main", force=False)
+
+
+def test_tag_exists_remote_ignores_empty_ls_remote_output(release_tree: Path) -> None:
+    empty = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+    with patch.object(release, "run_git", return_value=empty):
+        assert not release.tag_exists(release_tree, "v0.3.0", "origin")
+
+
+def test_tag_exists_remote_detects_matching_ref(release_tree: Path) -> None:
+    found = subprocess.CompletedProcess(
+        args=[],
+        returncode=0,
+        stdout="abc123\trefs/tags/v0.3.0\n",
+        stderr="",
+    )
+    with patch.object(release, "run_git", return_value=found) as run_git:
+        assert release.tag_exists(release_tree, "v0.3.0", "origin")
+    run_git.assert_called_once_with(release_tree, "ls-remote", "--tags", "origin", "refs/tags/v0.3.0", check=False)
 
 
 def test_assert_versions_consistent(release_tree: Path) -> None:

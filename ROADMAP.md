@@ -1,6 +1,6 @@
 # Roadmap
 
-Planned improvements beyond the current `0.2.0` release. Not committed to a timeline.
+Planned improvements beyond the current `0.3.0` release. Not committed to a timeline.
 
 Several extraction, OCR, and quality items below were informed by a review of [LiteParse](other-projects/liteparse/) (local-first spatial PDF parser with pluggable OCR, multi-format conversion, and evaluation harness). Document Translator stays **translation-first**; LiteParse is adopted as an **optional extraction backend**, not as a core dependency or full rewrite.
 

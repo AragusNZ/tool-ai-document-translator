@@ -255,9 +255,11 @@ def assert_on_branch(root: Path, branch: str) -> None:
 
 
 def tag_exists(root: Path, tag: str, remote: str | None = None) -> bool:
-    args = ["rev-parse", "--verify", tag] if remote is None else ["ls-remote", "--tags", remote, tag]
-    result = run_git(root, *args, check=False)
-    return result.returncode == 0
+    if remote is None:
+        result = run_git(root, "rev-parse", "--verify", tag, check=False)
+        return result.returncode == 0
+    result = run_git(root, "ls-remote", "--tags", remote, f"refs/tags/{tag}", check=False)
+    return result.returncode == 0 and bool(result.stdout.strip())
 
 
 def assert_versions_consistent(root: Path, version: str) -> None:
